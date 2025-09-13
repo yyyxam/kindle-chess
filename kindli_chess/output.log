@@ -1,2 +1,3 @@
-2025-09-11T17:36:53.605908946+02:00 - Anwendung gestartet. Log-Nachrichten werden in 'output.log' geschrieben.
-2025-09-11T17:36:53.606027561+02:00 - This is a test log!
+2025-09-13T21:36:44.317435592+02:00 - Anwendung gestartet. Log-Nachrichten werden in 'output.log' geschrieben.
+2025-09-13T21:36:44.317569894+02:00 - This is a test log!
+2025-09-13T21:36:44.919910943+02:00 - Game { id: "sb492NcC", perf: Performance { key: "rapid", name: "Rapid" }, rated: true, players: [Player { name: "Australopithecus", id: "australopithecus", color: "white", rating: 1763 }, Player { name: "rodeo", id: "rodeo", color: "black", rating: 1843 }], pgn: "e4 e5 Nf3 Nc6 c3 d5 exd5 Qxd5 b3 Bg4 Bc4 Qd6 Qe2 Nf6 d3 Be7 O-O O-O Nbd2 Rae8 Bb2 e4 dxe4 Ne5 Qe3", clock: "10+10" } is todays puzzle
