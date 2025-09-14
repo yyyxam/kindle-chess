@@ -6,17 +6,20 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 
-pub mod api;
-pub mod models;
+pub mod api {
+    pub mod api;
+    pub mod models;
+    pub mod oauth;
+}
 
-use models::ChessGame;
+use api::models::DailyPuzzle;
 
 #[tokio::main]
 async fn main() -> Result<(), ExitFailure> {
     init_log();
     info!("This is a test log!");
 
-    let res = ChessGame::get().await?;
+    let res = DailyPuzzle::get().await?;
     info!("{:?} is todays puzzle", res.game);
     Ok(())
 }

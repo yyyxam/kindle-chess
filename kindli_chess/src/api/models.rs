@@ -1,7 +1,12 @@
+use oauth2::basic::BasicClient;
+use oauth2::{CsrfToken, PkceCodeVerifier};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
+// PUZZLES
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ChessGame {
+pub struct DailyPuzzle {
     pub game: Game,
     pub puzzle: Puzzle,
 }
@@ -41,4 +46,18 @@ struct Player {
 struct Performance {
     key: String,
     name: String,
+}
+
+// OAUTH2
+#[derive(Deserialize, Debug)]
+pub struct CallbackParams {
+    code: String,
+    state: String,
+}
+
+pub struct OAuthClient {
+    client: BasicClient,
+    pkce_verifier: Arc<Mutex<Option<PkceCodeVerifier>>>,
+    csrf_token: Arc<Mutex<Option<CsrfToken>>>,
+    access_token: Arc<Mutex<Option<String>>>,
 }
