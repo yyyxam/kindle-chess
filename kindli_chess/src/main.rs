@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use exitfailure::ExitFailure;
 use log::LevelFilter;
 use log::info;
@@ -13,14 +15,25 @@ pub mod api {
 }
 
 use api::models::DailyPuzzle;
+use api::oauth::start_oauth_flow;
+
+use crate::api::models::OAuthState;
 
 #[tokio::main]
-async fn main() -> Result<(), ExitFailure> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_log();
-    info!("This is a test log!");
+    let client_id = "your_lichess_client_id".to_string();
+    let client_secret = "your_lichess_client_secret".to_string();
 
-    let res = DailyPuzzle::get().await?;
-    info!("{:?} is todays puzzle", res.game);
+    info!("Starting OAuth flow..");
+    let access_token = start_oauth_flow(client_id, client_secret).await?;
+
+    info!("Successfully authenticated");
+    info!("Access token: {}", &access_token[0..10]);
+
+    // let res_puzzle = DailyPuzzle::get().await?;
+    // info!("{:?} is todays puzzle", res_puzzle.game);
+
     Ok(())
 }
 

@@ -1,8 +1,5 @@
-use oauth2::basic::BasicClient;
-use oauth2::{CsrfToken, PkceCodeVerifier};
+use oauth2::{AccessToken, RefreshToken, TokenType};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 // PUZZLES
 #[derive(Serialize, Deserialize, Debug)]
@@ -49,15 +46,81 @@ struct Performance {
 }
 
 // OAUTH2
-#[derive(Deserialize, Debug)]
-pub struct CallbackParams {
-    code: String,
-    state: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LichessUser {
+    pub id: String,
+    pub username: String,
+    pub perfs: Option<serde_json::Value>,
+    pub created_at: Option<i64>,
+    pub disabled: Option<bool>,
+    pub tos_violation: Option<bool>,
+    pub profile: Option<UserProfile>,
+    pub seen_at: Option<i64>,
+    pub patron: Option<bool>,
+    pub verified: Option<bool>,
+    pub play_time: Option<serde_json::Value>,
+    pub title: Option<String>,
 }
 
-pub struct OAuthClient {
-    client: BasicClient,
-    pkce_verifier: Arc<Mutex<Option<PkceCodeVerifier>>>,
-    csrf_token: Arc<Mutex<Option<CsrfToken>>>,
-    access_token: Arc<Mutex<Option<String>>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub country: Option<String>,
+    pub location: Option<String>,
+    pub bio: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub links: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenInfo {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: Option<i64>,
+    pub scope: Option<String>,
+}
+
+impl TokenInfo {
+    pub fn to_oauth2_token(&self) -> (AccessToken, Option<RefreshToken>, Option<TokenType>) {
+        let access_token = AccessToken::new(self.access_token.clone());
+        let token_type = self.token_type.parse().ok();
+        (access_token, None, token_type)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub client_id: String,
+    pub redirect_port: u16,
+    pub scopes: Vec<String>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            client_id: format!("lichess-rust-client-{}", uuid::Uuid::new_v4()),
+            redirect_port: 8080,
+            scopes: vec![
+                "challenge:read".to_string(),
+                "challenge:write".to_string(),
+                "bot:play".to_string(),
+                "board:play".to_string(),
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthState {
+    pub state: String,
+    pub code_verifier: String,
+    pub auth_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthCallbackQuery {
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
 }
