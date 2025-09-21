@@ -1,5 +1,8 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
 use ::uuid::Uuid;
-use oauth2::{AccessToken, RefreshToken};
+use oauth2::{AccessToken, AuthUrl, ClientId, RedirectUrl, TokenUrl};
 use serde::{Deserialize, Serialize};
 
 // PUZZLES
@@ -47,6 +50,15 @@ struct Performance {
 }
 
 // OAUTH2
+pub struct OAuth2Client {
+    pub config: AuthConfig,
+    pub client_id: ClientId,
+    pub redirect_url: RedirectUrl,
+    pub auth_url: AuthUrl,
+    pub token_url: TokenUrl,
+    pub state: Arc<Mutex<Option<AuthState>>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LichessUser {
     pub id: String,

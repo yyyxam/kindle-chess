@@ -12,24 +12,27 @@ pub mod api {
 }
 
 use api::models::DailyPuzzle;
-use api::oauth::start_oauth_flow;
+use api::oauth::authenticate;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     init_log();
-    let client_id = "your_lichess_client_id".to_string();
-    let client_secret = "your_lichess_client_secret".to_string();
 
     info!("Starting OAuth flow..");
-    let access_token = start_oauth_flow(client_id, client_secret).await?;
-
+    match authenticate().await {
+        Ok((token, user)) => {
+            println!("Access token: {}", token.access_token);
+            println!("Authenticated as: {}", user.username);
+        }
+        Err(e) => {
+            eprintln!("Authentication failed: {}", e);
+        }
+    }
     info!("Successfully authenticated");
-    info!("Access token: {}", &access_token[0..10]);
+    //info!("Access token: {}", &access_token[0..10]);
 
     // let res_puzzle = DailyPuzzle::get().await?;
     // info!("{:?} is todays puzzle", res_puzzle.game);
-
-    Ok(())
 }
 
 fn init_log() -> Handle {

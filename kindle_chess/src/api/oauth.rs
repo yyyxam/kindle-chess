@@ -1,4 +1,6 @@
-use crate::models::{AuthCallbackQuery, AuthConfig, AuthState, LichessUser, TokenInfo};
+use crate::api::models::{
+    AuthCallbackQuery, AuthConfig, AuthState, LichessUser, OAuth2Client, TokenInfo,
+};
 use axum::{
     Router,
     extract::Query,
@@ -13,9 +15,9 @@ use oauth2::{
     Scope, StandardErrorResponse, StandardRevocableToken, StandardTokenIntrospectionResponse,
     StandardTokenResponse, TokenResponse, TokenUrl,
     basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
-    reqwest::async_http_client,
 };
 use qrcode::{QrCode, render::unicode};
+use reqwest::ClientBuilder;
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
@@ -24,18 +26,10 @@ const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
 
-pub struct OAuth2Client {
-    config: AuthConfig,
-    client_id: ClientId,
-    redirect_url: RedirectUrl,
-    auth_url: AuthUrl,
-    token_url: TokenUrl,
-    state: Arc<Mutex<Option<AuthState>>>,
-}
-
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
-        let redirect_uri = format!("http://localhost:{}/callback", config.redirect_port);
+        let host_ip = local_ip_address::local_ip()?.to_string();
+        let redirect_uri = format!("http://{}:{}/callback", host_ip, config.redirect_port);
 
         Ok(Self {
             client_id: ClientId::new(config.client_id.clone()),
@@ -43,7 +37,7 @@ impl OAuth2Client {
             auth_url: AuthUrl::new(LICHESS_AUTH_URL.to_string())?,
             token_url: TokenUrl::new(LICHESS_TOKEN_URL.to_string())?,
             config,
-            state: Arc::new(Mutex::new(None)),
+            state: Arc::new(Mutex::new(None::<AuthState>)),
         })
     }
 
@@ -65,6 +59,13 @@ impl OAuth2Client {
             .set_auth_uri(self.auth_url.clone())
             .set_token_uri(self.token_url.clone())
             .set_redirect_uri(self.redirect_url.clone())
+    }
+
+    fn create_http_client(&self) -> reqwest::Client {
+        ClientBuilder::new()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("Client should build.")
     }
 
     pub async fn start_auth_flow(&self) -> Result<AuthState, Box<dyn std::error::Error>> {
@@ -105,7 +106,7 @@ impl OAuth2Client {
         &self,
         code: String,
         state: String,
-    ) -> Result<TokenInfo, Box<dyn std::error::Error>> {
+    ) -> Result<TokenInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Verify state
         let state_lock = self.state.lock().await;
         let stored_state = state_lock.as_ref().ok_or("No auth state found")?;
@@ -119,12 +120,13 @@ impl OAuth2Client {
 
         // Create a fresh client for token exchange
         let client = self.create_client();
+        let http_client = self.create_http_client();
 
         // Exchange code for token
         let token_result = client
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(code_verifier)
-            .request_async(async_http_client)
+            .request_async(&http_client)
             .await?;
 
         let token_info = TokenInfo {
@@ -172,14 +174,16 @@ pub async fn run_auth_server(
     shutdown_rx: oneshot::Receiver<TokenInfo>,
 ) -> Result<TokenInfo, Box<dyn std::error::Error>> {
     let (tx, rx) = oneshot::channel::<TokenInfo>();
-    let tx = Arc::new(Mutex::new(Some(tx)));
 
-    let oauth_client_clone = oauth_client.clone();
     let app = Router::new()
         .route(
             "/callback",
-            get(move |query: Query<AuthCallbackQuery>| {
-                handle_callback(query, oauth_client_clone.clone(), tx.clone())
+            get({
+                let tx = Arc::new(Mutex::new(Some(tx)));
+                let oauth_client_clone = oauth_client.clone();
+                async move |query: Query<AuthCallbackQuery>| {
+                    handle_callback(query, oauth_client_clone.clone(), tx.clone()).await
+                }
             }),
         )
         .route("/", get(root_handler))
