@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use log::LevelFilter;
 use log::info;
 use log4rs::Handle;
@@ -12,6 +14,9 @@ pub mod api {
 }
 
 use api::oauth::authenticate;
+use serde_json::from_str;
+
+use crate::api::api::resign_game;
 
 //use crate::api::api::get_daily_puzzle;
 
@@ -31,17 +36,32 @@ async fn main() {
     //     }
     // }
 
+    let mut auth_token: String = String::new();
+    let game_id: String = String::from("LG4IZg4k");
+
     info!("Starting OAuth flow..");
     match authenticate().await {
         Ok((token, user)) => {
             println!("Access token: {}", token.access_token);
             println!("Authenticated as: {}", user.username);
+            auth_token = token.access_token;
         }
         Err(e) => {
             eprintln!("Authentication failed: {}", e);
         }
     }
     info!("Successfully authenticated");
+    info!("Trying to abort game {}", game_id);
+
+    match resign_game(&game_id, &auth_token).await {
+        Ok(()) => {
+            println!("Auth-request flow worked!");
+        }
+        Err(e) => {
+            eprintln!("Auth-request failed: {}", e);
+        }
+    }
+
     //info!("Access token: {}", &access_token[0..10]);
 }
 
