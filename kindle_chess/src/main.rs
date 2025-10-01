@@ -11,12 +11,25 @@ pub mod api {
     pub mod oauth;
 }
 
-use api::models::DailyPuzzle;
 use api::oauth::authenticate;
+
+//use crate::api::api::get_daily_puzzle;
 
 #[tokio::main]
 async fn main() {
     init_log();
+
+    // info!("Retreiving Daily Puzzle...");
+    // match get_daily_puzzle().await {
+    //     Ok(daily_puzzle) => {
+    //         info!("Retrieved Daily Puzzle!");
+    //         info!("Puzzle is {:?}", daily_puzzle.game);
+    //         info!("Some stats: {:?}", daily_puzzle.puzzle);
+    //     }
+    //     Err(e) => {
+    //         info!("Error retrieving puzzle: {}", e)
+    //     }
+    // }
 
     info!("Starting OAuth flow..");
     match authenticate().await {
@@ -30,9 +43,6 @@ async fn main() {
     }
     info!("Successfully authenticated");
     //info!("Access token: {}", &access_token[0..10]);
-
-    // let res_puzzle = DailyPuzzle::get().await?;
-    // info!("{:?} is todays puzzle", res_puzzle.game);
 }
 
 fn init_log() -> Handle {
