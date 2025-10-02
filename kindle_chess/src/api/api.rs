@@ -23,9 +23,9 @@ pub async fn resign_game(
     let response = client.post(url).bearer_auth(token).send().await?;
 
     if !response.status().is_success() {
-        return Err(format!("Failed to get user info: {}", response.status()).into());
+        return Err(format!("Failed to resign game: {}", response.status()).into());
     } else {
-        println!("Game aborted successfully. Loser");
+        println!("Game lost successfully (by resign)");
     }
 
     Ok(())

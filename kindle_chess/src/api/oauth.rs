@@ -22,6 +22,9 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 
+use std::fs::File;
+use std::io::prelude::{Read, Write};
+
 const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
@@ -147,25 +150,6 @@ impl OAuth2Client {
         *state_lock = None;
 
         Ok(token_info)
-    }
-
-    pub async fn get_user_info(
-        &self,
-        token: &str,
-    ) -> Result<LichessUser, Box<dyn std::error::Error>> {
-        let client = reqwest::Client::new();
-        let response = client
-            .get(format!("{}/account", LICHESS_API_BASE))
-            .bearer_auth(token)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(format!("Failed to get user info: {}", response.status()).into());
-        }
-
-        let user: LichessUser = response.json().await?;
-        Ok(user)
     }
 }
 
@@ -366,6 +350,22 @@ pub fn generate_qr_code(url: &str) -> Result<String, Box<dyn std::error::Error>>
     Ok(image)
 }
 
+pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("{}/account", LICHESS_API_BASE))
+        .bearer_auth(token)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(format!("Failed to get user info: {}", response.status()).into());
+    }
+
+    let user: LichessUser = response.json().await?;
+    Ok(user)
+}
+
 pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
     let config = AuthConfig::default();
     let oauth_client = Arc::new(OAuth2Client::new(config)?);
@@ -396,8 +396,41 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     let _ = shutdown_tx.send(token.clone());
 
     // Get user info
-    let user = oauth_client.get_user_info(&token.access_token).await?;
-    info!("Successfully authenticated as: {}", user.username);
+    let user = get_user_info(&token.access_token).await?;
+    info!("Successfully re-authenticated as: {}", user.username);
+
+    // TODO: Save the whole TokenInfo
+    let mut file = File::create("token.env")?;
+    let buf = serde_json::to_vec(&token)?;
+    file.write_all(&buf[..])?;
 
     Ok((token, user))
+}
+
+pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+    let mut file = File::open(std::path::Path::new("token.env"))?;
+    let mut buf = vec![];
+    file.read_to_end(&mut buf)?;
+    let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
+    let user = get_user_info(&token_info.access_token).await?;
+    info!(
+        "Successfully authenticated from token as: {}",
+        user.username
+    );
+    return Ok((token_info, user));
+}
+
+pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
+    match load_token().await {
+        Ok((token_info, _)) => {
+            info!("Authenticated via Token - Nice!");
+            return Ok(token_info.access_token);
+        }
+        Err(_) => {
+            //authenticate
+            let (token_info, _) = authenticate().await?;
+            info!("Authenticated via direct authentification - Nice!");
+            return Ok(token_info.access_token);
+        }
+    }
 }

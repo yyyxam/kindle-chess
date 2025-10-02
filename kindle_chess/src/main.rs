@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use log::LevelFilter;
 use log::info;
 use log4rs::Handle;
@@ -13,8 +11,7 @@ pub mod api {
     pub mod oauth;
 }
 
-use api::oauth::authenticate;
-use serde_json::from_str;
+use api::oauth::get_authenticated;
 
 use crate::api::api::resign_game;
 
@@ -39,17 +36,12 @@ async fn main() {
     let mut auth_token: String = String::new();
     let game_id: String = String::from("LG4IZg4k");
 
-    info!("Starting OAuth flow..");
-    match authenticate().await {
-        Ok((token, user)) => {
-            println!("Access token: {}", token.access_token);
-            println!("Authenticated as: {}", user.username);
-            auth_token = token.access_token;
-        }
-        Err(e) => {
-            eprintln!("Authentication failed: {}", e);
-        }
-    }
+    info!("First try of authenticating..");
+    let auth_token: String = get_authenticated().await.unwrap();
+    info!("The auth-token so far is: {}", auth_token);
+    info!("Second try of (re-)authenticating..");
+    let auth_token: String = get_authenticated().await.unwrap();
+    info!("The auth-token now is: {}", auth_token);
     info!("Successfully authenticated");
     info!("Trying to abort game {}", game_id);
 
@@ -61,8 +53,6 @@ async fn main() {
             eprintln!("Auth-request failed: {}", e);
         }
     }
-
-    //info!("Access token: {}", &access_token[0..10]);
 }
 
 fn init_log() -> Handle {
