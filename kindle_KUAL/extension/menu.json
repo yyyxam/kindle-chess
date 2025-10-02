@@ -5,16 +5,9 @@
       "priority": 0,
       "items": [
         {
-          "name": "Hello World Test",
+          "name": "Script-Test",
           "priority": 1,
-          "action": "/mnt/us/hellokindle/safe-test.sh",
-          "params": "--kual",
-          "exitmenu": false
-        },
-        {
-          "name": "Debug Info",
-          "priority": 2,
-          "action": "/mnt/us/hellokindle/debug-info.sh",
+          "action": "/mnt/us/hellokindle/safe-test-scripts.sh",
           "params": "--kual",
           "exitmenu": false
         }
