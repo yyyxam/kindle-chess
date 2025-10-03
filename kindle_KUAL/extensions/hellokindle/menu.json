@@ -10,6 +10,13 @@
           "action": "/mnt/us/hellokindle/safe-test-scripts.sh",
           "params": "--kual",
           "exitmenu": false
+        },
+        {
+          "name": "Eips-Test-Script_keep_menu",
+          "priority": 2,
+          "action": "/mnt/us/hellokindle/eips-test.sh",
+          "params": "--kual",
+          "exitmenu": false
         }
       ]
     }
