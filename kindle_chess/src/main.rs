@@ -39,9 +39,7 @@ async fn main() {
     info!("First try of authenticating..");
     let auth_token: String = get_authenticated().await.unwrap();
     info!("The auth-token so far is: {}", auth_token);
-    info!("Second try of (re-)authenticating..");
-    let auth_token: String = get_authenticated().await.unwrap();
-    info!("The auth-token now is: {}", auth_token);
+
     info!("Successfully authenticated");
     info!("Trying to abort game {}", game_id);
 

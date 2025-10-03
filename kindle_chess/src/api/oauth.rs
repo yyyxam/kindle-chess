@@ -18,16 +18,17 @@ use oauth2::{
 };
 use qrcode::{QrCode, render::unicode};
 use reqwest::ClientBuilder;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 
-use std::fs::File;
+use std::fs::{File, remove_file};
 use std::io::prelude::{Read, Write};
 
 const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
+const AUTH_TOKEN_PATH: &str = "token.env";
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -408,7 +409,7 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
 }
 
 pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    let mut file = File::open(std::path::Path::new("token.env"))?;
+    let mut file = File::open(std::path::Path::new(AUTH_TOKEN_PATH))?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
     let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
@@ -433,4 +434,9 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
             return Ok(token_info.access_token);
         }
     }
+}
+
+pub fn logout() -> Result<String, Box<dyn std::error::Error>> {
+    remove_file(AUTH_TOKEN_PATH)?;
+    String::from_str("200")
 }
