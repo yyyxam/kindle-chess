@@ -17,6 +17,13 @@
           "action": "/mnt/us/hellokindle/eips-test.sh",
           "params": "--kual",
           "exitmenu": false
+        },
+        {
+          "name": "OAuth Test Script",
+          "priority": 3,
+          "action": "/mnt/us/hellokindle/safe-test-outh.sh",
+          "params": "--kual",
+          "exitmenu": false
         }
       ]
     }
