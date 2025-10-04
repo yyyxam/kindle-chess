@@ -17,5 +17,5 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo install cross --git https://github.com/cross-rs/cross && RUSTFLAGS="-C target-feature=+crt-static" cross build --target armv7-unknown-linux-musleabi --release
+      run: cd ./kindle_chess && cargo install cross --git https://github.com/cross-rs/cross && RUSTFLAGS="-C target-feature=+crt-static" cross build --target armv7-unknown-linux-musleabi --release
 
