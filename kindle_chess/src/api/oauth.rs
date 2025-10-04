@@ -28,7 +28,7 @@ use std::io::prelude::Read;
 const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
-const AUTH_TOKEN_PATH: &str = "./token.json";
+const AUTH_TOKEN_PATH: &str = "./token.json"; // TODO: move this to app-directory instead of relative (=extension)-directory
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {

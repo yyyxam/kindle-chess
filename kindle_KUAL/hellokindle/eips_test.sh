@@ -3,7 +3,7 @@
 # SICHERHEITS-WRAPPER für Kindle Hello World Test
 
 EXTENSION_PATH="/mnt/us/extensions/hellokindle"
-LOG_FILE="/mnt/us/hellokindle/tmp/hello-test.log"
+LOG_FILE="/mnt/us/hellokindle/tmp/eips-test.log"
 
 echo "=== Kindle Hello World Test gestartet ===" > "$LOG_FILE"
 echo "Zeit: $(date)" >> "$LOG_FILE"
