@@ -31,7 +31,7 @@ fi
 echo "Starte Test-App..." >> "$LOG_FILE"
 
 # WICHTIG: Timeout - falls das Programm hängt, automatisch beenden nach 15 Sekunden
-timeout 15 $BINARY_PATH >> "$LOG_FILE" 2>&1
+timeout 180 $BINARY_PATH >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
 
