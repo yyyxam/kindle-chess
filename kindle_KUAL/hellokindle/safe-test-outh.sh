@@ -3,13 +3,14 @@
 # SICHERHEITS-WRAPPER für Kindle Hello World Test
 
 EXTENSION_PATH="/mnt/us/extensions/hellokindle"
-BINARY_PATH="/mnt/us/hellokindle/kindle-hello"
-LOG_FILE="/mnt/us/hellokindle/tmp/auth_test.log"
+APP_PATH="mtn/us/hellokindle"
+BINARY_PATH="/mnt/us/hellokindle/bin/kindle-hello"
+LOG_FILE="/mnt/us/hellokindle/tmp/script.log"
 
 echo "=== Kindle Script-Test gestartet ===" > "$LOG_FILE"
 echo "Zeit: $(date)" >> "$LOG_FILE"
 
-cd "$EXTENSION_PATH"
+cd "$APP_PATH"
 
 # Sicherheitscheck 1: Binary vorhanden?
 if [ ! -f "$BINARY_PATH" ]; then

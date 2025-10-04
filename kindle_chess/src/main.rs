@@ -11,11 +11,13 @@ pub mod api {
     pub mod oauth;
 }
 
-use api::api::resign_game;
+// use api::api::resign_game;
 use api::oauth::get_authenticated;
 
 // use crate::api::oauth::logout;
 //use crate::api::api::get_daily_puzzle;
+
+const APP_LOG_FILE: &str = "/mnt/us/hellokindle/tmp/app.log";
 
 #[tokio::main]
 async fn main() {
@@ -68,7 +70,7 @@ fn init_log() -> Handle {
     // 1. Appender für die Datei definieren
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build("/mnt/us/hellokindle/tmp/rust_app.log")
+        .build(APP_LOG_FILE)
         .unwrap();
 
     // // 2. Logging-Konfiguration erstellen
