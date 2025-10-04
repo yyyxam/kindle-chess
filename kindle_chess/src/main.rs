@@ -68,7 +68,7 @@ fn init_log() -> Handle {
     // 1. Appender für die Datei definieren
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build("output.log")
+        .build("/mnt/us/hellokindle/tmp/rust_app.log")
         .unwrap();
 
     // // 2. Logging-Konfiguration erstellen
