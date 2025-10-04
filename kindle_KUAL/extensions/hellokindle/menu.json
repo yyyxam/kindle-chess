@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "name": "Kindli-Chess",
+      "priority": 0,
+      "items": [
+        {
+          "name": "Eips-Test",
+          "priority": 1,
+          "action": "/mnt/us/hellokindle/eips_test.sh",
+          "params": "--kual",
+          "exitmenu": false
+        },
+        {
+          "name": "OAuth Test Script",
+          "priority": 2,
+          "action": "/mnt/us/hellokindle/app_test.sh",
+          "params": "--kual",
+          "exitmenu": false
+        }
+      ]
+    }
+  ]
+}

@@ -11,11 +11,13 @@ pub mod api {
     pub mod oauth;
 }
 
-use api::api::resign_game;
+// use api::api::resign_game;
 use api::oauth::get_authenticated;
 
 // use crate::api::oauth::logout;
 //use crate::api::api::get_daily_puzzle;
+
+const APP_LOG_FILE: &str = "/mnt/us/hellokindle/tmp/app.log";
 
 #[tokio::main]
 async fn main() {
@@ -33,8 +35,8 @@ async fn main() {
     //     }
     // }
 
-    let mut auth_token: String = String::new();
-    let game_id: String = String::from("LG4IZg4k");
+    // let mut auth_token: String = String::new();
+    // let game_id: String = String::from("LG4IZg4k");
 
     info!("First try of authenticating..");
     let auth_token: String = get_authenticated().await.unwrap();
@@ -52,15 +54,15 @@ async fn main() {
     //     }
     // }
 
-    info!("Trying to abort game {}", game_id);
-    match resign_game(&game_id, &auth_token).await {
-        Ok(()) => {
-            println!("Auth-request flow worked!");
-        }
-        Err(e) => {
-            eprintln!("Auth-request failed: {}", e);
-        }
-    }
+    // info!("Trying to abort game {}", game_id);
+    // match resign_game(&game_id, &auth_token).await {
+    //     Ok(()) => {
+    //         println!("Auth-request flow worked!");
+    //     }
+    //     Err(e) => {
+    //         eprintln!("Auth-request failed: {}", e);
+    //     }
+    // }
 }
 
 fn init_log() -> Handle {
@@ -68,7 +70,7 @@ fn init_log() -> Handle {
     // 1. Appender für die Datei definieren
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build("output.log")
+        .build(APP_LOG_FILE)
         .unwrap();
 
     // // 2. Logging-Konfiguration erstellen
