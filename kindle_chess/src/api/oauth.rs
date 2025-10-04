@@ -400,10 +400,7 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     let user = get_user_info(&token.access_token).await?;
     info!("Successfully re-authenticated as: {}", user.username);
 
-    // let mut file = File::create("token.env")?;
-    // let buf = serde_json::to_vec(&token)?;
-    // file.write_all(&buf[..])?;
-
+    // Write TokenInfo to token.json-File
     match write(AUTH_TOKEN_PATH, serde_json::to_string_pretty(&token)?) {
         Ok(()) => {
             info!("Auth-Token written to  {}", AUTH_TOKEN_PATH)
