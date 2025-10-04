@@ -18,16 +18,17 @@ use oauth2::{
 };
 use qrcode::{QrCode, render::unicode};
 use reqwest::ClientBuilder;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 
-use std::fs::File;
-use std::io::prelude::{Read, Write};
+use std::fs::{File, remove_file, write};
+use std::io::prelude::Read;
 
 const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
+const AUTH_TOKEN_PATH: &str = "./token.json";
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -399,16 +400,21 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     let user = get_user_info(&token.access_token).await?;
     info!("Successfully re-authenticated as: {}", user.username);
 
-    // TODO: Save the whole TokenInfo
-    let mut file = File::create("token.env")?;
-    let buf = serde_json::to_vec(&token)?;
-    file.write_all(&buf[..])?;
+    // Write TokenInfo to token.json-File
+    match write(AUTH_TOKEN_PATH, serde_json::to_string_pretty(&token)?) {
+        Ok(()) => {
+            info!("Auth-Token written to  {}", AUTH_TOKEN_PATH)
+        }
+        Err(e) => {
+            info!("Error writing AuthToken: {}", e)
+        }
+    }
 
     Ok((token, user))
 }
 
 pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    let mut file = File::open(std::path::Path::new("token.env"))?;
+    let mut file = File::open(std::path::Path::new(AUTH_TOKEN_PATH))?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
     let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
@@ -428,9 +434,15 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
         }
         Err(_) => {
             //authenticate
+            info!("No token found..");
             let (token_info, _) = authenticate().await?;
             info!("Authenticated via direct authentification - Nice!");
             return Ok(token_info.access_token);
         }
     }
+}
+
+pub fn logout() -> std::io::Result<()> {
+    remove_file(AUTH_TOKEN_PATH)?;
+    Ok(())
 }
