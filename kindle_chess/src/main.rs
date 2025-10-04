@@ -11,16 +11,16 @@ pub mod api {
     pub mod oauth;
 }
 
+use api::api::resign_game;
 use api::oauth::get_authenticated;
 
-use crate::api::api::resign_game;
-
+// use crate::api::oauth::logout;
 //use crate::api::api::get_daily_puzzle;
 
 #[tokio::main]
 async fn main() {
     init_log();
-
+    // DAILY-PUZZLE-TEST
     // info!("Retreiving Daily Puzzle...");
     // match get_daily_puzzle().await {
     //     Ok(daily_puzzle) => {
@@ -41,8 +41,18 @@ async fn main() {
     info!("The auth-token so far is: {}", auth_token);
 
     info!("Successfully authenticated");
-    info!("Trying to abort game {}", game_id);
 
+    // LOGOUT / TOKEN-DELETE-TEST
+    // match logout() {
+    //     Ok(()) => {
+    //         println!("Token deleted!")
+    //     }
+    //     Err(e) => {
+    //         println!("Token deletion error: {}", e)
+    //     }
+    // }
+
+    info!("Trying to abort game {}", game_id);
     match resign_game(&game_id, &auth_token).await {
         Ok(()) => {
             println!("Auth-request flow worked!");

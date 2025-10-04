@@ -22,13 +22,13 @@ use std::{str::FromStr, sync::Arc};
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 
-use std::fs::{File, remove_file};
-use std::io::prelude::{Read, Write};
+use std::fs::{File, remove_file, write};
+use std::io::prelude::Read;
 
 const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
 const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
 const LICHESS_API_BASE: &str = "https://lichess.org/api";
-const AUTH_TOKEN_PATH: &str = "token.env";
+const AUTH_TOKEN_PATH: &str = "./token.json";
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -400,10 +400,18 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     let user = get_user_info(&token.access_token).await?;
     info!("Successfully re-authenticated as: {}", user.username);
 
-    // TODO: Save the whole TokenInfo
-    let mut file = File::create("token.env")?;
-    let buf = serde_json::to_vec(&token)?;
-    file.write_all(&buf[..])?;
+    // let mut file = File::create("token.env")?;
+    // let buf = serde_json::to_vec(&token)?;
+    // file.write_all(&buf[..])?;
+
+    match write(AUTH_TOKEN_PATH, serde_json::to_string_pretty(&token)?) {
+        Ok(()) => {
+            info!("Auth-Token written to  {}", AUTH_TOKEN_PATH)
+        }
+        Err(e) => {
+            info!("Error writing AuthToken: {}", e)
+        }
+    }
 
     Ok((token, user))
 }
@@ -429,6 +437,7 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
         }
         Err(_) => {
             //authenticate
+            info!("No token found..");
             let (token_info, _) = authenticate().await?;
             info!("Authenticated via direct authentification - Nice!");
             return Ok(token_info.access_token);
@@ -436,7 +445,7 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
     }
 }
 
-pub fn logout() -> Result<String, Box<dyn std::error::Error>> {
+pub fn logout() -> std::io::Result<()> {
     remove_file(AUTH_TOKEN_PATH)?;
-    String::from_str("200")
+    Ok(())
 }
