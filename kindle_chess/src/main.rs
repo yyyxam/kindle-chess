@@ -33,8 +33,8 @@ async fn main() {
     //     }
     // }
 
-    let mut auth_token: String = String::new();
-    let game_id: String = String::from("LG4IZg4k");
+    // let mut auth_token: String = String::new();
+    // let game_id: String = String::from("LG4IZg4k");
 
     info!("First try of authenticating..");
     let auth_token: String = get_authenticated().await.unwrap();
@@ -52,15 +52,15 @@ async fn main() {
     //     }
     // }
 
-    info!("Trying to abort game {}", game_id);
-    match resign_game(&game_id, &auth_token).await {
-        Ok(()) => {
-            println!("Auth-request flow worked!");
-        }
-        Err(e) => {
-            eprintln!("Auth-request failed: {}", e);
-        }
-    }
+    // info!("Trying to abort game {}", game_id);
+    // match resign_game(&game_id, &auth_token).await {
+    //     Ok(()) => {
+    //         println!("Auth-request flow worked!");
+    //     }
+    //     Err(e) => {
+    //         eprintln!("Auth-request failed: {}", e);
+    //     }
+    // }
 }
 
 fn init_log() -> Handle {
