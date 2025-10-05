@@ -5,7 +5,7 @@
 EXTENSION_PATH="/mnt/us/extensions/hellokindle"
 APP_PATH="mtn/us/hellokindle"
 BINARY_PATH="/mnt/us/hellokindle/bin/kindle-hello"
-LOG_FILE="/mnt/us/hellokindle/tmp/script.log"
+LOG_FILE="/mnt/us/hellokindle/log/script.log"
 
 echo "=== Binary test script started... ===" > "$LOG_FILE"
 echo "Time: $(date)" >> "$LOG_FILE"
@@ -46,7 +46,7 @@ if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 124 ]; then
     echo "ERROR in running test app!" >> "$LOG_FILE"
     eips -c
     eips "An error occured, running the test app"
-    eips "Check logs: /mnt/us/hellokindle/tmp/script.log and app.log"
+    eips "Check logs: /mnt/us/hellokindle/log/script.log and app.log"
     sleep 3
 elif [ $EXIT_CODE -eq 124 ]; then
     echo "Timeout - App has been shutdown automatically" >> "$LOG_FILE"
