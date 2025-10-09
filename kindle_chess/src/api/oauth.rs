@@ -18,17 +18,12 @@ use oauth2::{
 };
 use qrcode::{QrCode, render::unicode};
 use reqwest::ClientBuilder;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 
 use std::fs::{File, remove_file, write};
 use std::io::prelude::Read;
-
-const LICHESS_AUTH_URL: &str = "https://lichess.org/oauth";
-const LICHESS_TOKEN_URL: &str = "https://lichess.org/api/token";
-const LICHESS_API_BASE: &str = "https://lichess.org/api";
-const AUTH_TOKEN_PATH: &str = "./token.json"; // TODO: move this to app-directory instead of relative (=extension)-directory
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -38,8 +33,8 @@ impl OAuth2Client {
         Ok(Self {
             client_id: ClientId::new(config.client_id.clone()),
             redirect_url: RedirectUrl::new(redirect_uri)?,
-            auth_url: AuthUrl::new(LICHESS_AUTH_URL.to_string())?,
-            token_url: TokenUrl::new(LICHESS_TOKEN_URL.to_string())?,
+            auth_url: AuthUrl::new("https://lichess.org/oauth".to_string())?,
+            token_url: TokenUrl::new(concat!(env!("LICHESS_API_BASE"), "/token").to_string())?,
             config,
             state: Arc::new(Mutex::new(None::<AuthState>)),
         })
@@ -354,7 +349,7 @@ pub fn generate_qr_code(url: &str) -> Result<String, Box<dyn std::error::Error>>
 pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let response = client
-        .get(format!("{}/account", LICHESS_API_BASE))
+        .get(format!("{}/account", env!("LICHESS_API_BASE")))
         .bearer_auth(token)
         .send()
         .await?;
@@ -401,9 +396,9 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     info!("Successfully re-authenticated as: {}", user.username);
 
     // Write TokenInfo to token.json-File
-    match write(AUTH_TOKEN_PATH, serde_json::to_string_pretty(&token)?) {
+    match write(env!("AUTH_TOKEN"), serde_json::to_string_pretty(&token)?) {
         Ok(()) => {
-            info!("Auth-Token written to  {}", AUTH_TOKEN_PATH)
+            info!("Auth-Token written to  {}", env!("AUTH_TOKEN"))
         }
         Err(e) => {
             info!("Error writing AuthToken: {}", e)
@@ -414,7 +409,7 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
 }
 
 pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    let mut file = File::open(std::path::Path::new(AUTH_TOKEN_PATH))?;
+    let mut file = File::open(std::path::Path::new(env!("AUTH_TOKEN")))?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
     let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
@@ -443,6 +438,6 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
 }
 
 pub fn logout() -> std::io::Result<()> {
-    remove_file(AUTH_TOKEN_PATH)?;
+    remove_file(env!("AUTH_TOKEN"))?;
     Ok(())
 }

@@ -17,11 +17,10 @@ use api::oauth::get_authenticated;
 // use crate::api::oauth::logout;
 //use crate::api::api::get_daily_puzzle;
 
-const APP_LOG_FILE: &str = "/mnt/us/hellokindle/tmp/app.log";
-
 #[tokio::main]
 async fn main() {
     init_log();
+
     // DAILY-PUZZLE-TEST
     // info!("Retreiving Daily Puzzle...");
     // match get_daily_puzzle().await {
@@ -70,7 +69,7 @@ fn init_log() -> Handle {
     // 1. Appender für die Datei definieren
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build(APP_LOG_FILE)
+        .build(concat!(env!("LOG_FILE_DIR"), "app.log"))
         .unwrap();
 
     // // 2. Logging-Konfiguration erstellen
@@ -83,7 +82,7 @@ fn init_log() -> Handle {
     let logger = log4rs::init_config(config).unwrap();
 
     // // 4. Loslegen mit dem Logging
-    info!("Anwendung gestartet. Log-Nachrichten werden in 'output.log' geschrieben.");
+    info!("Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.");
 
     logger
 }
