@@ -1,11 +1,11 @@
 use crate::api::models::{
-    AuthCallbackQuery, AuthConfig, AuthState, LichessUser, OAuth2Client, TokenInfo,
+    AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
 };
 use axum::{
     Router,
     extract::Query,
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse},
     routing::get,
 };
 use log::info;
@@ -21,6 +21,7 @@ use reqwest::ClientBuilder;
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
+use url::Url;
 
 use std::fs::{File, remove_file, write};
 use std::io::prelude::Read;
@@ -196,7 +197,7 @@ async fn handle_callback(
     Query(params): Query<AuthCallbackQuery>,
     oauth_client: Arc<OAuth2Client>,
     tx: Arc<Mutex<Option<oneshot::Sender<TokenInfo>>>>,
-) -> Response {
+) -> axum::response::Response {
     if let Some(error) = params.error {
         let error_msg = format!(
             "Authorization failed: {} - {}",
@@ -424,17 +425,37 @@ pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error
 pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
     match load_token().await {
         Ok((token_info, _)) => {
-            info!("Authenticated via Token - Nice!");
+            info!("Authenticated via existing token.");
             return Ok(token_info.access_token);
         }
         Err(_) => {
             //authenticate
-            info!("No token found..");
+            info!("No token found.. Starting authentication process");
             let (token_info, _) = authenticate().await?;
-            info!("Authenticated via direct authentification - Nice!");
+            info!("Authenticated via direct authentification.");
             return Ok(token_info.access_token);
         }
     }
+}
+
+pub async fn authenticated_request(
+    url: String,
+    token: &str,
+    request_type: HttpMethod,
+) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    let url = Url::parse(&*url)?;
+    let client = reqwest::Client::new();
+
+    // propably not all of them are in lichess api
+    let response = match request_type {
+        HttpMethod::GET => client.get(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::POST => client.post(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::PUT => client.put(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::DELETE => client.delete(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::PATCH => client.patch(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::STREAM => client.get(url).bearer_auth(token).send().await?,
+    };
+    Ok(response)
 }
 
 pub fn logout() -> std::io::Result<()> {

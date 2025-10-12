@@ -11,57 +11,20 @@ pub mod api {
     pub mod oauth;
 }
 
-// use api::api::resign_game;
 use api::oauth::get_authenticated;
 
-// use crate::api::oauth::logout;
-//use crate::api::api::get_daily_puzzle;
+use crate::api::api::stream_game_event;
 
 #[tokio::main]
 async fn main() {
     init_log();
 
-    // DAILY-PUZZLE-TEST
-    // info!("Retreiving Daily Puzzle...");
-    // match get_daily_puzzle().await {
-    //     Ok(daily_puzzle) => {
-    //         info!("Retrieved Daily Puzzle!");
-    //         info!("Puzzle is {:?}", daily_puzzle.game);
-    //         info!("Some stats: {:?}", daily_puzzle.puzzle);
-    //     }
-    //     Err(e) => {
-    //         info!("Error retrieving puzzle: {}", e)
-    //     }
-    // }
-
-    // let mut auth_token: String = String::new();
-    // let game_id: String = String::from("LG4IZg4k");
-
-    info!("First try of authenticating..");
     let auth_token: String = get_authenticated().await.unwrap();
-    info!("The auth-token so far is: {}", auth_token);
-
     info!("Successfully authenticated");
+    let game_id: String = String::from("rImh6Xt3BZlY");
 
-    // LOGOUT / TOKEN-DELETE-TEST
-    // match logout() {
-    //     Ok(()) => {
-    //         println!("Token deleted!")
-    //     }
-    //     Err(e) => {
-    //         println!("Token deletion error: {}", e)
-    //     }
-    // }
-
-    // info!("Trying to abort game {}", game_id);
-    // match resign_game(&game_id, &auth_token).await {
-    //     Ok(()) => {
-    //         println!("Auth-request flow worked!");
-    //     }
-    //     Err(e) => {
-    //         eprintln!("Auth-request failed: {}", e);
-    //     }
-    // }
+    // stream_event(&auth_token).await.unwrap();
+    stream_game_event(&game_id, &auth_token).await.unwrap();
 }
 
 fn init_log() -> Handle {
