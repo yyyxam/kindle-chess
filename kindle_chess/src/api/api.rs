@@ -74,7 +74,7 @@ pub async fn stream_game_event(
             Ok(event) => {
                 info!("Received event: {:?}", event);
                 // Handle the event based on its type
-                handle_game_state_event(event).await?;
+                handle_game_event(event).await?;
             }
             Err(e) => {
                 // Ignore the stream ping (=empty line)
@@ -89,7 +89,7 @@ pub async fn stream_game_event(
     Ok(())
 }
 
-pub async fn handle_game_state_event(
+pub async fn handle_game_event(
     event: GameStateStreamEvent,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match event {
