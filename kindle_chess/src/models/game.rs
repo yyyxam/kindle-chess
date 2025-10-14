@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::board::Performance;
 
-// GAME
+// ~~~~~~~~~~~~~~~~ GAME ~~~~~~~~~~~~~~~~
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Game {
     id: String,

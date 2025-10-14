@@ -5,7 +5,8 @@ use crate::models::{
     oauth::{LichessUser, TokenInfo},
 };
 
-// BOARD
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BOARD ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Board {
     pub token: TokenInfo,
@@ -18,7 +19,7 @@ pub struct Board {
     pub player0_turn: bool,  // if true then it's currently player0's turn
 }
 
-// ~~~~~~~~~~~~~~ STREAMS ~~~~~~~~~~~~~~~
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ STREAMS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
@@ -30,7 +31,7 @@ pub enum StreamEvent {
     ChallengeDeclined(ChallengeDeclinedEvent),
 }
 
-// EVENT-STREAM-TYPES
+// ~~~~~~~~~~~~~~~~ EVENT-STREAM-TYPES ~~~~~~~~~~~~~~~~
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameStartEvent {
     #[serde(rename = "fullId")]
@@ -174,7 +175,7 @@ pub enum GameStateStreamEvent {
     OpponentGone(OpponentGoneEvent),
 }
 
-// GAME-STATE-STREAM-EVENT-TYPES
+// ~~~~~~~~~~~~~~~~ GAME-STATE-STREAM-TYPES ~~~~~~~~~~~~~~~~
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameFullEvent {
     // pub id: Option<String>,
