@@ -9,14 +9,12 @@ use reqwest_streams::JsonStreamResponse;
 impl Board {
     pub async fn new(game_id: String) -> Result<Board, Box<dyn std::error::Error>> {
         let (token, user) = get_authenticated().await?;
-        // map LichessUser to played_by to player0.
-        // map scnd played by to player1.
-
         Ok(Self {
             token: token,
             user: user,
             bitboard: Vec::new(),
             game_id: game_id,
+            // These should all get updated with the start of the game-state-stream
             white: None,
             black: None,
             player0_white: false,
@@ -89,13 +87,18 @@ impl Board {
 
     // BOARD-STATE-STREAM-ENDPOINT
     pub async fn stream_game_event(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        /*!
+         * Streams ndjson-Responses.
+         * = New line = new event;
+         * Tries to parse from stream to EventTypes.
+         */
         let url = format!(
             "{}/board/game/stream/{}",
             env!("LICHESS_API_BASE"),
             self.game_id
         );
 
-        info!("Getting game state stream");
+        info!("Game-State-Stream started..");
 
         let mut response = authenticated_request(url, &self.token, HttpMethod::STREAM)
             .await?
@@ -127,12 +130,15 @@ impl Board {
         &mut self,
         event: GameStateStreamEvent,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        /*!
+         * Handles the given EventType. Affects board-properties -> mut board
+         */
         match event {
             GameStateStreamEvent::GameFull(full_game_data) => {
                 // INIT BOARD
                 // Parses first response of GameStream
 
-                // TODO: check if game is still going on
+                // TODO (#21): check if game is still going on
 
                 // Check who playes white and set player-variable for the board
                 self.player0_white = match Some(&full_game_data.white)
@@ -152,7 +158,7 @@ impl Board {
 
                 // Check if it's player0's turn
                 if player0_turn(full_game_data.state.moves, self.player0_white) {
-                    // TODO: refactor this (to >Game< maybe?)
+                    // TODO (#22): refactor this (to >Game< maybe?)
                     loop {
                         match self
                             .move_piece(&self.game_id, get_turn_input().await.as_str())
@@ -176,7 +182,7 @@ impl Board {
                 self.black = Some(full_game_data.black);
             }
             GameStateStreamEvent::GameState(game_state_data) => {
-                // TODO: Update bit-board
+                // TODO (#24): Update bit-board
                 // ...
                 // (1) -> player's turn now, await input: ..
                 // (2) -> do nothing and await next response
