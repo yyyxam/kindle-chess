@@ -426,19 +426,19 @@ pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error
     return Ok((token_info, user));
 }
 
-pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
     /*! Returns auth-token by either loading it from disc, or by reauthenticating */
     match load_token().await {
-        Ok((token_info, _)) => {
+        Ok((token_info, user_info)) => {
             info!("Authenticated via existing token.");
-            return Ok(token_info.access_token);
+            return Ok((token_info, user_info));
         }
         Err(_) => {
             //authenticate
             info!("No token found.. Starting authentication process");
-            let (token_info, _) = authenticate().await?;
+            let (token_info, user_info) = authenticate().await?;
             info!("Authenticated via direct authentification.");
-            return Ok(token_info.access_token);
+            return Ok((token_info, user_info));
             // TODO: What if this authentication process fails? (e.g. losing internet access in process)
         }
     }
@@ -446,11 +446,13 @@ pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
 
 pub async fn authenticated_request(
     url: String,
-    token: &str,
+    token: &TokenInfo,
     request_type: HttpMethod,
 ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
     let url = Url::parse(&*url)?;
     let client = reqwest::Client::new();
+    // TODO (#6) Handle expiry of token
+    let token = &token.access_token;
 
     // propably not all of them are in lichess api
     let response = match request_type {

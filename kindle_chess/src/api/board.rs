@@ -1,7 +1,6 @@
-use std::io;
-
 use crate::api::oauth::{authenticated_request, get_authenticated};
-use crate::models::board::{Board, GameStateStreamEvent, StreamEvent};
+use crate::app::game::{get_turn_input, player0_turn};
+use crate::models::board::{Board, GameStateStreamEvent, PlayedBy, StreamEvent};
 use crate::models::oauth::HttpMethod;
 use futures::StreamExt;
 use log::{info, warn};
@@ -9,10 +8,19 @@ use reqwest_streams::JsonStreamResponse;
 
 impl Board {
     pub async fn new(game_id: String) -> Result<Board, Box<dyn std::error::Error>> {
+        let (token, user) = get_authenticated().await?;
+        // map LichessUser to played_by to player0.
+        // map scnd played by to player1.
+
         Ok(Self {
-            token: get_authenticated().await?,
+            token: token,
+            user: user,
             bitboard: Vec::new(),
             game_id: game_id,
+            white: None,
+            black: None,
+            player0_white: false,
+            player0_turn: false,
         })
     }
 
@@ -33,6 +41,7 @@ impl Board {
             .unwrap();
 
         if !response.status().is_success() {
+            info!("Failed to move piece");
             return Err(format!("Failed to move piece: {}", response.status()).into());
         } else {
             info!("Piece moved successfully");
@@ -79,7 +88,7 @@ impl Board {
     }
 
     // BOARD-STATE-STREAM-ENDPOINT
-    pub async fn stream_game_event(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn stream_game_event(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!(
             "{}/board/game/stream/{}",
             env!("LICHESS_API_BASE"),
@@ -87,18 +96,18 @@ impl Board {
         );
 
         info!("Getting game state stream");
+
         let mut response = authenticated_request(url, &self.token, HttpMethod::STREAM)
             .await?
             .json_nl_stream::<GameStateStreamEvent>(1024);
+
         // Process each event as it arrives
         while let Some(result) = response.next().await {
             match result {
                 Ok(event) => {
                     info!("Received event: {:?}", event);
-                    println!("Received event: {:?}", event);
                     // Handle the event based on its type
                     self.handle_game_event(event).await?;
-                    // TODO: fix GameFullEvent not being parsed (=going to Err-arm)
                 }
                 Err(e) => {
                     // Ignore the stream ping (=empty line)
@@ -115,37 +124,87 @@ impl Board {
     }
 
     pub async fn handle_game_event(
-        &self,
+        &mut self,
         event: GameStateStreamEvent,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            GameStateStreamEvent::GameFull(_) => {
-                info!("Issa GameFullEvent")
+            GameStateStreamEvent::GameFull(full_game_data) => {
+                // INIT BOARD
+                // Parses first response of GameStream
+
+                // TODO: check if game is still going on
+
+                // Check who playes white and set player-variable for the board
+                self.player0_white = match Some(&full_game_data.white)
+                    .expect("Unexpected value for field 'white' received in 'Board'")
+                {
+                    PlayedBy::User(player_info) => {
+                        if player_info.id == self.user.id {
+                            println!("You are playing as white");
+                            true
+                        } else {
+                            println!("You are playing as black");
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+
+                // Check if it's player0's turn
+                if player0_turn(full_game_data.state.moves, self.player0_white) {
+                    // TODO: refactor this (to >Game< maybe?)
+                    loop {
+                        match self
+                            .move_piece(&self.game_id, get_turn_input().await.as_str())
+                            .await
+                        {
+                            Ok(_) => {
+                                println!("Piece was moved");
+                                break;
+                            }
+                            Err(e) => {
+                                println!("Piece could not be moved {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
+                } else {
+                    println!("It's not your turn")
+                }
+                // Set PlayedBy-state on board
+                self.white = Some(full_game_data.white);
+                self.black = Some(full_game_data.black);
             }
-            GameStateStreamEvent::GameState(_) => {
-                info!("Issa GameStateEvent");
-                // Update bit-board
+            GameStateStreamEvent::GameState(game_state_data) => {
+                // TODO: Update bit-board
                 // ...
-                // Check if move is awaited or opponents turn
-                // ...
-                // Await move
-                // TODO: check if response contains opps move or if it's player's move
                 // (1) -> player's turn now, await input: ..
                 // (2) -> do nothing and await next response
-                let mut buffer = String::new();
-                println!("Enter move to play!");
-                // TODO implement regex to sanitize
-                let reader = io::stdin();
-                match reader.read_line(&mut buffer) {
-                    Ok(b) => {
-                        self.move_piece(&self.game_id, &buffer).await.unwrap();
-                    }
-                    Err(e) => {
-                        println!("Failed to parse input: {}", e)
-                    }
-                }
 
-                // ...
+                // Check if it's player0's turn
+
+                // (1)
+                if player0_turn(game_state_data.moves, self.player0_white) {
+                    loop {
+                        match self
+                            // If so, get input, translate it to turn
+                            .move_piece(&self.game_id, get_turn_input().await.as_str())
+                            .await
+                        {
+                            Ok(_) => {
+                                println!("Piece was moved");
+                                break;
+                            }
+                            Err(e) => {
+                                println!("Piece could not be moved: {:?}", e);
+                                continue;
+                            }
+                        }
+                    } // Iterate over this is long as it needs to receive a success by the API
+                } else {
+                    // (2)
+                    println!("It's not your turn")
+                }
             }
             GameStateStreamEvent::ChatLine(_) => {
                 info!("Issa ChatlineEvent")

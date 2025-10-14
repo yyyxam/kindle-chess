@@ -10,6 +10,7 @@ pub mod api {
     pub mod board;
     pub mod oauth;
 }
+pub mod app;
 pub mod models;
 
 use crate::models::board::Board;
@@ -18,12 +19,11 @@ use crate::models::board::Board;
 async fn main() {
     init_log();
 
-    let game_id: String = String::from("q3UYlwrJHUej");
+    let game_id: String = String::from("OfLkm6ZejAIU");
 
-    // stream_event(&auth_token).await.unwrap();
-    // stream_game_event(&game_id, &auth_token).await.unwrap();
-    let board = Board::new(game_id).await.unwrap();
+    let mut board = Board::new(game_id).await.unwrap();
     board.stream_game_event().await.unwrap();
+
     //board.move_piece(&game_id, "f6f5").await.unwrap();
 }
 

@@ -2,8 +2,6 @@ use crate::models::puzzle::DailyPuzzle;
 
 use reqwest::Url;
 
-use reqwest_streams::*;
-
 // PUZZLE-ENDPOINT
 pub async fn get_daily_puzzle() -> Result<DailyPuzzle, Box<dyn std::error::Error>> {
     let url = format!("{}/puzzle/daily", env!("LICHESS_API_BASE"));

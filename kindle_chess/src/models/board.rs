@@ -1,12 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::game::Player;
+use crate::models::{
+    game::Player,
+    oauth::{LichessUser, TokenInfo},
+};
 
 // BOARD
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Board {
-    pub token: String,
+    pub token: TokenInfo,
+    pub user: LichessUser, // == player0
     pub bitboard: Vec<u64>,
     pub game_id: String,
+    pub white: Option<PlayedBy>,
+    pub black: Option<PlayedBy>,
+    pub player0_white: bool, // if true then player0 had first turn
+    pub player0_turn: bool,  // if true then it's currently player0's turn
 }
 
 // ~~~~~~~~~~~~~~ STREAMS ~~~~~~~~~~~~~~~
@@ -168,7 +177,7 @@ pub enum GameStateStreamEvent {
 // GAME-STATE-STREAM-EVENT-TYPES
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameFullEvent {
-    // pub id: String,
+    // pub id: Option<String>,
     pub variant: GameVariant,
     pub speed: Speed,
     pub perf: PerfMode,
@@ -179,9 +188,7 @@ pub struct GameFullEvent {
     pub black: PlayedBy,
     #[serde(rename = "initialFen")]
     pub initial_fen: String,
-    pub clock: Clock,
-    #[serde(rename = "type")]
-    pub event_type: String,
+    pub clock: Option<Clock>,
     pub state: GameStateEvent,
 }
 
@@ -199,6 +206,7 @@ pub struct GameStateEvent {
     pub wtakeback: Option<bool>,
     pub btakeback: Option<bool>,
     pub status: String,
+    pub winner: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -238,12 +246,26 @@ pub struct Clock {
     increment: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PlayedBy {
-    id: String,
-    name: String,
-    title: Option<String>,
-    rating: u64,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+#[serde(rename_all = "camelCase")]
+pub enum PlayedBy {
+    User(PlayedByPlayer),
+    Ai(PlayedByAi),
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct PlayedByPlayer {
+    pub id: String,
+    pub name: String,
+    pub title: Option<String>,
+    pub rating: u64,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct PlayedByAi {
+    #[serde(rename = "aiLevel")]
+    pub ai_level: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
