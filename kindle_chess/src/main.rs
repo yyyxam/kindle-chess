@@ -7,24 +7,24 @@ use log4rs::encode::pattern::PatternEncoder;
 
 pub mod api {
     pub mod api;
-    pub mod models;
+    pub mod board;
     pub mod oauth;
 }
+pub mod models;
 
-use api::oauth::get_authenticated;
-
-use crate::api::api::stream_game_event;
+use crate::models::board::Board;
 
 #[tokio::main]
 async fn main() {
     init_log();
 
-    let auth_token: String = get_authenticated().await.unwrap();
-    info!("Successfully authenticated");
-    let game_id: String = String::from("rImh6Xt3BZlY");
+    let game_id: String = String::from("q3UYlwrJHUej");
 
     // stream_event(&auth_token).await.unwrap();
-    stream_game_event(&game_id, &auth_token).await.unwrap();
+    // stream_game_event(&game_id, &auth_token).await.unwrap();
+    let board = Board::new(game_id).await.unwrap();
+    board.stream_game_event().await.unwrap();
+    //board.move_piece(&game_id, "f6f5").await.unwrap();
 }
 
 fn init_log() -> Handle {
