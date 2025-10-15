@@ -19,6 +19,31 @@ pub struct Board {
     pub player0_turn: bool,  // if true then it's currently player0's turn
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameData {
+    pub full_id: String,
+    pub game_id: String,
+    pub color: String,
+    pub fen: String,
+    pub has_moved: bool,
+    pub is_my_turn: bool,
+    pub last_move: String,
+    pub opponent: PlayedBy,
+    pub perf: String,
+    pub rated: bool,
+    pub seconds_left: Option<u64>,
+    pub source: String,
+    pub speed: Speed,
+    pub variant: GameVariant,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameDataList {
+    pub now_playing: Vec<GameData>,
+}
+
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ STREAMS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -181,7 +206,7 @@ pub struct GameFullEvent {
     // pub id: Option<String>,
     pub variant: GameVariant,
     pub speed: Speed,
-    pub perf: PerfMode,
+    pub perf: String,
     pub rated: bool,
     #[serde(rename = "createdAt")]
     pub created_at: u64,
@@ -238,6 +263,7 @@ pub struct GameVariant {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PerfMode {
+    // #[serde(rename = "correspondence")]
     name: String,
 }
 

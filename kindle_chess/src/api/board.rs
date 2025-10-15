@@ -1,6 +1,6 @@
 use crate::api::oauth::{authenticated_request, get_authenticated};
 use crate::app::game::{get_turn_input, player0_turn};
-use crate::models::board::{Board, GameStateStreamEvent, PlayedBy, StreamEvent};
+use crate::models::board::{Board, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent};
 use crate::models::oauth::HttpMethod;
 use futures::StreamExt;
 use log::{info, warn};
@@ -10,7 +10,7 @@ impl Board {
     pub async fn new(game_id: String) -> Result<Board, Box<dyn std::error::Error>> {
         let (token, user) = get_authenticated().await?;
         Ok(Self {
-            token: token,
+            token: token, // TODO: Refactor toen outside of board; instanciate board with full game info
             user: user,
             bitboard: Vec::new(),
             game_id: game_id,
@@ -46,6 +46,33 @@ impl Board {
         }
 
         Ok(())
+    }
+
+    pub async fn get_ongoing_games(
+        &self,
+        n: u8,
+    ) -> Result<GameDataList, Box<dyn std::error::Error>> {
+        /*!Endpoint for listing [5] ongoing games.*/
+        let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
+        let response = authenticated_request(url, &self.token, HttpMethod::GET).await?;
+
+        if !&response.status().is_success() {
+            return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
+        }
+
+        let bytes = response.bytes().await?;
+
+        let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
+            // Print the raw response for debugging
+            warn!(
+                "Failed to parse JSON. Raw response: {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            warn!("Parse error: {}", e);
+            e
+        })?;
+        info!("The received and parsed data {:?}", data);
+        Ok(data)
     }
 
     pub async fn resign_game(&self, game_id: &String) -> Result<(), Box<dyn std::error::Error>> {
@@ -118,7 +145,6 @@ impl Board {
                         continue;
                     }
                     warn!("Error parsing event: {}", e);
-                    println!("Error parsing event: {}", e);
                 }
             }
         }
@@ -137,6 +163,7 @@ impl Board {
             GameStateStreamEvent::GameFull(full_game_data) => {
                 // INIT BOARD
                 // Parses first response of GameStream
+                info!("Received FullGameData");
 
                 // TODO (#21): check if game is still going on
 
@@ -146,36 +173,38 @@ impl Board {
                 {
                     PlayedBy::User(player_info) => {
                         if player_info.id == self.user.id {
-                            println!("You are playing as white");
                             true
                         } else {
-                            println!("You are playing as black");
                             false
                         }
                     }
                     _ => false,
                 };
 
+                // TODO: Update bitboard
+                // ...
+
                 // Check if it's player0's turn
                 if player0_turn(full_game_data.state.moves, self.player0_white) {
                     // TODO (#22): refactor this (to >Game< maybe?)
+                    // TODO: this should somehow check
                     loop {
                         match self
                             .move_piece(&self.game_id, get_turn_input().await.as_str())
                             .await
                         {
                             Ok(_) => {
-                                println!("Piece was moved");
+                                info!("Piece was moved");
                                 break;
                             }
                             Err(e) => {
-                                println!("Piece could not be moved {:?}", e);
+                                info!("Piece could not be moved {:?}", e);
                                 continue;
                             }
                         }
                     }
                 } else {
-                    println!("It's not your turn")
+                    info!("Opponent's turn")
                 }
                 // Set PlayedBy-state on board
                 self.white = Some(full_game_data.white);

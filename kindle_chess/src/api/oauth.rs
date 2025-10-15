@@ -456,7 +456,7 @@ pub async fn authenticated_request(
 
     // propably not all of them are in lichess api
     let response = match request_type {
-        HttpMethod::GET => client.get(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::GET => client.get(url).bearer_auth(token).send().await?,
         HttpMethod::POST => client.post(url).bearer_auth(token).send().await.unwrap(),
         HttpMethod::PUT => client.put(url).bearer_auth(token).send().await.unwrap(),
         HttpMethod::DELETE => client.delete(url).bearer_auth(token).send().await.unwrap(),
