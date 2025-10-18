@@ -8,3 +8,6 @@ embedded-graphics = "0.7.0"
 embedded-graphics-simulator = "0.3.0"
 log = "0.4.27"
 log4rs = "1.3.0"
+
+[build-dependencies]
+dotenv = "0.15"
