@@ -8,10 +8,9 @@ use crate::models::{
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BOARD ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Board {
+pub struct BoardAPI {
     pub token: TokenInfo,
-    pub user: LichessUser, // == player0
-    pub bitboard: Vec<u64>,
+    pub user: LichessUser, // =
     pub game_id: String,
     pub white: Option<PlayedBy>,
     pub black: Option<PlayedBy>,
@@ -69,7 +68,7 @@ pub struct GameStartEvent {
     pub last_move: String,
     pub source: String,
     pub status: GameStatus,
-    pub variant: GameVariant,
+    pub variant: String,
     pub speed: String,
     pub perf: String,
     pub rated: bool,
@@ -196,6 +195,7 @@ pub struct PerfCallenge {
 pub enum GameStateStreamEvent {
     GameFull(GameFullEvent),
     GameState(GameStateEvent),
+    GameOver(GameOverEvent),
     ChatLine(ChatLineEvent),
     OpponentGone(OpponentGoneEvent),
 }
@@ -206,7 +206,7 @@ pub struct GameFullEvent {
     // pub id: Option<String>,
     pub variant: GameVariant,
     pub speed: Speed,
-    pub perf: String,
+    pub perf: PerfMode,
     pub rated: bool,
     #[serde(rename = "createdAt")]
     pub created_at: u64,
@@ -232,7 +232,23 @@ pub struct GameStateEvent {
     pub wtakeback: Option<bool>,
     pub btakeback: Option<bool>,
     pub status: String,
-    pub winner: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GameOverEvent {
+    // #[serde(rename = "type")]
+    // pub event_type: String,
+    pub moves: String,
+    pub wtime: u64,
+    pub btime: u64,
+    pub winc: u64,
+    pub binc: u64,
+    pub wdraw: Option<bool>,
+    pub bdraw: Option<bool>,
+    pub wtakeback: Option<bool>,
+    pub btakeback: Option<bool>,
+    pub status: String,
+    pub winner: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

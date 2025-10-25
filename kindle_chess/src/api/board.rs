@@ -1,18 +1,24 @@
-use crate::api::oauth::{authenticated_request, get_authenticated};
+use crate::api::oauth::authenticated_request;
 use crate::app::game::{get_turn_input, player0_turn};
-use crate::models::board::{Board, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent};
-use crate::models::oauth::HttpMethod;
+use crate::models::board::{BoardAPI, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent};
+use crate::models::oauth::{HttpMethod, LichessUser, TokenInfo};
 use futures::StreamExt;
 use log::{info, warn};
 use reqwest_streams::JsonStreamResponse;
 
-impl Board {
-    pub async fn new(game_id: String) -> Result<Board, Box<dyn std::error::Error>> {
-        let (token, user) = get_authenticated().await?;
+impl BoardAPI {
+    pub async fn new(
+        game_id: String,
+        auth: (TokenInfo, LichessUser),
+    ) -> Result<BoardAPI, Box<dyn std::error::Error>> {
+        /* TODO (backlog)
+         * Make auth optional. If Some(auth), initiate online play. Of not:
+         * Local play (to be implemented)
+         */
+
         Ok(Self {
-            token: token, // TODO: Refactor toen outside of board; instanciate board with full game info
-            user: user,
-            bitboard: Vec::new(),
+            token: auth.0, // TODO: Refactor toen outside of board; instanciate board with full game info
+            user: auth.1,
             game_id: game_id,
             // These should all get updated with the start of the game-state-stream
             white: None,
@@ -46,33 +52,6 @@ impl Board {
         }
 
         Ok(())
-    }
-
-    pub async fn get_ongoing_games(
-        &self,
-        n: u8,
-    ) -> Result<GameDataList, Box<dyn std::error::Error>> {
-        /*!Endpoint for listing [5] ongoing games.*/
-        let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
-        let response = authenticated_request(url, &self.token, HttpMethod::GET).await?;
-
-        if !&response.status().is_success() {
-            return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
-        }
-
-        let bytes = response.bytes().await?;
-
-        let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
-            // Print the raw response for debugging
-            warn!(
-                "Failed to parse JSON. Raw response: {}",
-                String::from_utf8_lossy(&bytes)
-            );
-            warn!("Parse error: {}", e);
-            e
-        })?;
-        info!("The received and parsed data {:?}", data);
-        Ok(data)
     }
 
     pub async fn resign_game(&self, game_id: &String) -> Result<(), Box<dyn std::error::Error>> {
@@ -137,7 +116,12 @@ impl Board {
                 Ok(event) => {
                     info!("Received event: {:?}", event);
                     // Handle the event based on its type
-                    self.handle_game_event(event).await?;
+                    match self.handle_game_event(event).await {
+                        Ok(_) => continue,
+                        Err(e) => {
+                            info!("Error while handling game event {e}")
+                        }
+                    }
                 }
                 Err(e) => {
                     // Ignore the stream ping (=empty line)
@@ -181,6 +165,10 @@ impl Board {
                     _ => false,
                 };
 
+                // Set PlayedBy-state on board
+                self.white = Some(full_game_data.white);
+                self.black = Some(full_game_data.black);
+
                 // TODO: Update bitboard
                 // ...
 
@@ -206,9 +194,11 @@ impl Board {
                 } else {
                     info!("Opponent's turn")
                 }
-                // Set PlayedBy-state on board
-                self.white = Some(full_game_data.white);
-                self.black = Some(full_game_data.black);
+            }
+            GameStateStreamEvent::GameOver(game_state_data) => {
+                // Win condition checker
+                info!("Game is over. Winner is {}", game_state_data.winner);
+                // TODO: return some kind of flag to stop awaiting user input.
             }
             GameStateStreamEvent::GameState(game_state_data) => {
                 // TODO (#24): Update bit-board
@@ -298,4 +288,31 @@ impl Board {
         }
         Ok(())
     }
+}
+
+pub async fn get_ongoing_games(
+    auth_token: &TokenInfo,
+    n: u8,
+) -> Result<GameDataList, Box<dyn std::error::Error>> {
+    /*!Endpoint for listing [n] ongoing games. n must be in [1..50]. Results are ordered and chosen by 'urgency'*/
+    let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
+    let response = authenticated_request(url, auth_token, HttpMethod::GET).await?;
+
+    if !&response.status().is_success() {
+        return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
+    }
+
+    let bytes = response.bytes().await?;
+
+    let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
+        // Print the raw response for debugging
+        warn!(
+            "Failed to parse JSON. Raw response: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        warn!("Parse error: {}", e);
+        e
+    })?;
+    info!("The received and parsed data {:?}", data);
+    Ok(data)
 }

@@ -6,13 +6,43 @@ use oauth2::{AccessToken, AuthUrl, ClientId, RedirectUrl, TokenUrl};
 use serde::{Deserialize, Serialize};
 
 // OAUTH2
+#[derive(Debug, Deserialize, Serialize)]
 pub struct OAuth2Client {
     pub config: AuthConfig,
     pub client_id: ClientId,
     pub redirect_url: RedirectUrl,
     pub auth_url: AuthUrl,
     pub token_url: TokenUrl,
+    #[serde(with = "arc_mutable_option")]
     pub state: Arc<Mutex<Option<AuthState>>>,
+}
+
+// Custom serde serialization and deserialization logic for `Arc<Mutex<Option<AuthState>>>`
+mod arc_mutable_option {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    use crate::models::oauth::AuthState;
+
+    pub fn serialize<S>(
+        state: &Arc<Mutex<Option<AuthState>>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Implement serialization if needed
+        serde::Serialize::serialize(&(), serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<Mutex<Option<AuthState>>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let inner_state: Option<AuthState> = Deserialize::deserialize(deserializer)?;
+        Ok(Arc::new(Mutex::new(inner_state)))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +85,7 @@ impl TokenInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct AuthConfig {
     pub client_id: String,
     pub redirect_port: u16,
@@ -77,7 +107,7 @@ impl Default for AuthConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AuthState {
     pub state: String,
     pub code_verifier: String,

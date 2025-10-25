@@ -35,7 +35,7 @@
 //     }
 // }
 
-// move_piece(&game_id, &board_move, &auth_token)
+// move_piece(&game_id, &board_move)
 //     .await
 //     .unwrap();
 

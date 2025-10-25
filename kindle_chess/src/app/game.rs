@@ -1,7 +1,7 @@
 use std::io;
 
 pub fn player0_turn(moves: String, player0_white: bool) -> bool {
-    println!("Move-Count: {}", moves.split_whitespace().count());
+    // println!("Move-Count: {}", moves.split_whitespace().count());
     let white_turn = moves.split_whitespace().count() % 2 == 0;
     println!("White's turn? : {}", white_turn);
     // Return true if player is white and it's whites turn. Negate logic if player's black
