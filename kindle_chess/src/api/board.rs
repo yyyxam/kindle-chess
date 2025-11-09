@@ -11,13 +11,8 @@ impl BoardAPI {
         game_id: String,
         auth: (TokenInfo, LichessUser),
     ) -> Result<BoardAPI, Box<dyn std::error::Error>> {
-        /* TODO (backlog)
-         * Make auth optional. If Some(auth), initiate online play. Of not:
-         * Local play (to be implemented)
-         */
-
         Ok(Self {
-            token: auth.0, // TODO: Refactor toen outside of board; instanciate board with full game info
+            token: auth.0,
             user: auth.1,
             game_id: game_id,
             // These should all get updated with the start of the game-state-stream
@@ -294,7 +289,10 @@ pub async fn get_ongoing_games(
     auth_token: &TokenInfo,
     n: u8,
 ) -> Result<GameDataList, Box<dyn std::error::Error>> {
-    /*!Endpoint for listing [n] ongoing games. n must be in [1..50]. Results are ordered and chosen by 'urgency'*/
+    /*!Endpoint for listing [n] ongoing games.
+     * n must be in [1..50].
+     * Results are ordered and chosen by 'urgency'
+     * */
     let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
     let response = authenticated_request(url, auth_token, HttpMethod::GET).await?;
 
