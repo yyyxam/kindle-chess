@@ -1,14 +1,16 @@
 [package]
-name = "display"
+name = "kindle-x11-test"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-dotenv = "0.15.0"
-embedded-graphics = "0.7.0"
-embedded-graphics-simulator = "0.3.0"
-log = "0.4.27"
-log4rs = "1.3.0"
+# When default-features = false, x11rb uses pure Rust automatically!
+x11rb = { version = "0.13", default-features = false }
+log = "0.4"
+env_logger = { version = "0.11", default-features = false }
 
-[build-dependencies]
-dotenv = "0.15"
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
