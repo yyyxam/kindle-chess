@@ -19,4 +19,16 @@ fn get_env_variables() -> () {
     // Pass to compiler
     println!("cargo:rustc-env=ROOT_DIR={}", root_dir);
     println!("cargo:rustc-env=LOG_FILE_DIR={}{}", root_dir, "log/");
+<<<<<<< HEAD
+=======
+    println!("cargo:rustc-env=ASSETS_DIR={}{}", root_dir, "assets/");
+    println!(
+        "cargo:rustc-env=AUTH_TOKEN={}{}",
+        root_dir, "secrets/token.json"
+    );
+    println!(
+        "cargo:rustc-env=LICHESS_API_BASE={}",
+        "https://lichess.org/api"
+    );
+>>>>>>> 5105401 (uncomplete KidnleDisplay implementation)
 }
