@@ -30,5 +30,4 @@ fn get_env_variables() -> () {
         "cargo:rustc-env=LICHESS_API_BASE={}",
         "https://lichess.org/api"
     );
->>>>>>> 5105401 (uncomplete KidnleDisplay implementation)
 }

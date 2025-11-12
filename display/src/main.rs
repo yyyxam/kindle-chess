@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 use log::LevelFilter;
 use log::info;
 use log4rs::Handle;
@@ -12,7 +11,6 @@ fn main() {
     info!("Hello World");
 }
 
-=======
 use core::convert::TryInto;
 use embedded_graphics::{
     pixelcolor::{Gray8, GrayColor},
@@ -50,17 +48,13 @@ fn main() {
     display.flush(RefreshMode::Full).unwrap();
 }
 // LOGS
->>>>>>> 5105401 (uncomplete KidnleDisplay implementation)
 fn init_log() -> Handle {
     // LOGGING
     // 1. Appender für die Datei definieren
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-<<<<<<< HEAD
         .build(concat!(env!("LOG_FILE_DIR"), "display.log"))
-=======
         .build(concat!("./logs/display.log"))
->>>>>>> 5105401 (uncomplete KidnleDisplay implementation)
         .unwrap();
 
     // // 2. Logging-Konfiguration erstellen
