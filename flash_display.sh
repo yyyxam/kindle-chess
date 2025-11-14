@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd display
+cd kindle_chess_ui
 
 echo "Building Binaries"
 podman run --rm -v "$PWD":/workspace:Z -w /workspace --env CARGO_NET_OFFLINE=false docker.io/messense/rust-musl-cross:arm-musleabi cargo build --release --target arm-unknown-linux-musleabi
