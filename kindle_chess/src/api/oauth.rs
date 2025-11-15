@@ -1,11 +1,11 @@
-use crate::api::models::{
-    AuthCallbackQuery, AuthConfig, AuthState, LichessUser, OAuth2Client, TokenInfo,
+use crate::models::oauth::{
+    AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
 };
 use axum::{
     Router,
     extract::Query,
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse},
     routing::get,
 };
 use image::{ImageBuffer, Luma};
@@ -28,6 +28,7 @@ use tokio::{
     time,
 };
 use tower_http::cors::CorsLayer;
+use url::Url;
 
 use std::fs;
 use std::fs::{File, remove_file, write};
@@ -206,7 +207,7 @@ async fn handle_callback(
     Query(params): Query<AuthCallbackQuery>,
     oauth_client: Arc<OAuth2Client>,
     tx: Arc<Mutex<Option<oneshot::Sender<TokenInfo>>>>,
-) -> Response {
+) -> axum::response::Response {
     if let Some(error) = params.error {
         let error_msg = format!(
             "Authorization failed: {} - {}",
@@ -358,6 +359,7 @@ pub fn generate_qr_code(
 }
 
 pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::error::Error>> {
+    /*! Tests success of authentication with privileged request (without wrapper) */
     let client = reqwest::Client::new();
     let response = client
         .get(format!("{}/account", env!("LICHESS_API_BASE")))
@@ -374,6 +376,7 @@ pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::erro
 }
 
 pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+    /*! Starts authentication flow */
     let config = AuthConfig::default();
     let oauth_client = Arc::new(OAuth2Client::new(config)?);
 
@@ -445,6 +448,7 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
 }
 
 pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+    /*! Loads auth-topken from disk */
     let mut file = File::open(std::path::Path::new(env!("AUTH_TOKEN")))?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
@@ -457,39 +461,44 @@ pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error
     return Ok((token_info, user));
 }
 
-pub async fn get_authenticated() -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+    /*! Returns auth-token by either loading it from disc, or by reauthenticating */
     match load_token().await {
-        Ok((token_info, _)) => {
-            info!("Authenticated via Token");
-            let mut eips_cmd = Command::new("eips");
-            eips_cmd
-                .arg("-c")
-                .output()
-                .expect("Failed to clear display");
-
-            thread::sleep(time::Duration::from_secs(2));
-
-            eips_cmd
-                .arg("Successfully authenticated. Clearing disp in 15s")
-                .output()
-                .expect("Failed to write to display");
-
-            thread::sleep(time::Duration::from_secs(15));
-
-            eips_cmd
-                .arg("-c")
-                .output()
-                .expect("Failed to clear display");
-            return Ok(token_info.access_token); // should be able to remove these return keywords
+        Ok((token_info, user_info)) => {
+            info!("Authenticated via existing token.");
+            return Ok((token_info, user_info));
         }
         Err(_) => {
             //authenticate
-            info!("No token found in {}..", env!("AUTH_TOKEN"));
-            let (token_info, _) = authenticate().await?;
-            info!("Authenticated via direct authentification - Nice!");
-            return Ok(token_info.access_token);
+            info!("No token found.. Starting authentication process");
+            let (token_info, user_info) = authenticate().await?;
+            info!("Authenticated via direct authentification.");
+            return Ok((token_info, user_info));
+            // TODO: What if this authentication process fails? (e.g. losing internet access in process)
         }
     }
+}
+
+pub async fn authenticated_request(
+    url: String,
+    token: &TokenInfo,
+    request_type: HttpMethod,
+) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    let url = Url::parse(&*url)?;
+    let client = reqwest::Client::new();
+    // TODO (#6) Handle expiry of token
+    let token = &token.access_token;
+
+    // propably not all of them are in lichess api
+    let response = match request_type {
+        HttpMethod::GET => client.get(url).bearer_auth(token).send().await?,
+        HttpMethod::POST => client.post(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::PUT => client.put(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::DELETE => client.delete(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::PATCH => client.patch(url).bearer_auth(token).send().await.unwrap(),
+        HttpMethod::STREAM => client.get(url).bearer_auth(token).send().await?,
+    };
+    Ok(response)
 }
 
 pub fn logout() -> std::io::Result<()> {
