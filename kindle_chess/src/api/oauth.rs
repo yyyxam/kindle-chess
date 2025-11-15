@@ -8,6 +8,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
+use image::{ImageBuffer, Luma};
 use log::info;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, EndpointNotSet,
@@ -16,15 +17,24 @@ use oauth2::{
     StandardTokenResponse, TokenResponse, TokenUrl,
     basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
 };
-use qrcode::{QrCode, render::unicode};
+use qrcode::{
+    QrCode,
+    // render::{Pixel, Renderer},
+};
 use reqwest::ClientBuilder;
-use std::sync::Arc;
-use tokio::sync::{Mutex, oneshot};
+use std::{sync::Arc, thread};
+use tokio::{
+    sync::{Mutex, oneshot},
+    time,
+};
 use tower_http::cors::CorsLayer;
 use url::Url;
 
+use std::fs;
 use std::fs::{File, remove_file, write};
 use std::io::prelude::Read;
+
+use std::process::Command;
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -337,14 +347,14 @@ async fn root_handler() -> Html<String> {
     )
 }
 
-pub fn generate_qr_code(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    /*! Generate qr code redirecting to authentication site */
+pub fn generate_qr_code(
+    url: &str,
+) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>, Box<dyn std::error::Error>> {
     let code = QrCode::new(url)?;
-    let image = code
-        .render::<unicode::Dense1x2>()
-        .dark_color(unicode::Dense1x2::Light)
-        .light_color(unicode::Dense1x2::Dark)
-        .build();
+    let image = code.render::<Luma<u8>>().build();
+
+    image.save("/tmp/qrcode.png").unwrap();
+
     Ok(image)
 }
 
@@ -379,12 +389,37 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
 
     // Generate QR code for mobile authentication
     match generate_qr_code(&auth_state.auth_url) {
-        Ok(qr) => {
-            info!("Or scan this QR code with your mobile device:");
-            info!("\n{}", qr);
+        Ok(_qr) => {
+            // info!("Or scan this QR code with your mobile device:");
+            // info!("\n{}", qr);
+            info!("Printing generated QR-code with eips");
+
+            let mut eips_cmd = Command::new("eips");
+            eips_cmd
+                .arg("-c")
+                .output()
+                .expect("Failed to clear display");
+
+            eips_cmd
+                .args([
+                    "10",
+                    "30",
+                    "Scan this QR-Code to login to lichess on phone: ",
+                ])
+                .output()
+                .expect("Couldn't render png qr via eips");
+
+            eips_cmd
+                .args(["-g", "/tmp/qrcode.png"])
+                .args(["x", "268"])
+                .args(["y", "268"])
+                .output()
+                .expect("Couldn't render png qr via eips");
+
+            fs::remove_file("/tmp/qrcode.png").unwrap();
         }
         Err(e) => {
-            info!("Could not generate QR code: {}", e);
+            info!("Could not generate/print QR code: {}", e);
         }
     }
 

@@ -17,6 +17,13 @@
           "action": "/mnt/us/hellokindle/app_test.sh",
           "params": "--kual",
           "exitmenu": false
+        },
+        {
+          "name": "Display Test Script",
+          "priority": 3,
+          "action": "/mnt/us/hellokindle/display_test.sh",
+          "params": "--kual",
+          "exitmenu": false
         }
       ]
     }
