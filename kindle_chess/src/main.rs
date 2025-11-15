@@ -7,61 +7,34 @@ use log4rs::encode::pattern::PatternEncoder;
 
 pub mod api {
     pub mod api;
-    pub mod models;
+    pub mod board;
     pub mod oauth;
 }
+pub mod app;
+pub mod local;
+pub mod models;
 
-// use api::api::resign_game;
-use api::oauth::get_authenticated;
-
-// use crate::api::oauth::logout;
-//use crate::api::api::get_daily_puzzle;
+use crate::api::board::get_ongoing_games;
+use crate::api::oauth::get_authenticated;
+use crate::models::board_api::BoardAPI;
 
 #[tokio::main]
 async fn main() {
     init_log();
 
-    // DAILY-PUZZLE-TEST
-    // info!("Retreiving Daily Puzzle...");
-    // match get_daily_puzzle().await {
-    //     Ok(daily_puzzle) => {
-    //         info!("Retrieved Daily Puzzle!");
-    //         info!("Puzzle is {:?}", daily_puzzle.game);
-    //         info!("Some stats: {:?}", daily_puzzle.puzzle);
-    //     }
-    //     Err(e) => {
-    //         info!("Error retrieving puzzle: {}", e)
-    //     }
-    // }
+    let auth = get_authenticated().await.unwrap();
 
-    // let mut auth_token: String = String::new();
-    // let game_id: String = String::from("LG4IZg4k");
+    // Get 5 most urgent games - assuming urgency = oldest / depending on gamemode
+    let on_games = get_ongoing_games(&auth.0, 5).await.unwrap().now_playing;
+    for game in &on_games {
+        println!("Retrieved game-id {}", &game.full_id);
+    }
+    let game_id = on_games[0].full_id.clone();
+    println!("Streaming game id: {}", &game_id);
 
-    info!("First try of authenticating..");
-    let auth_token: String = get_authenticated().await.unwrap();
-    info!("The auth-token so far is: {}", auth_token);
+    let mut board = BoardAPI::new(game_id, auth).await.unwrap();
 
-    info!("Successfully authenticated");
-
-    // LOGOUT / TOKEN-DELETE-TEST
-    // match logout() {
-    //     Ok(()) => {
-    //         println!("Token deleted!")
-    //     }
-    //     Err(e) => {
-    //         println!("Token deletion error: {}", e)
-    //     }
-    // }
-
-    // info!("Trying to abort game {}", game_id);
-    // match resign_game(&game_id, &auth_token).await {
-    //     Ok(()) => {
-    //         println!("Auth-request flow worked!");
-    //     }
-    //     Err(e) => {
-    //         eprintln!("Auth-request failed: {}", e);
-    //     }
-    // }
+    board.stream_game_event().await.unwrap();
 }
 
 fn init_log() -> Handle {
