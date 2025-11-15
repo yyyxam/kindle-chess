@@ -11,6 +11,7 @@ pub mod api {
     pub mod oauth;
 }
 pub mod app;
+pub mod local;
 pub mod models;
 
 use crate::api::board::get_ongoing_games;

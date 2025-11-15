@@ -6,20 +6,28 @@
 
 use crate::{
     api::oauth::get_authenticated,
-    models::{board_api::BoardAPI, board_local::BoardLocal, chess::Chess},
+    models::{
+        board_api::BoardAPI,
+        board_local::BoardLocal,
+        chess::{Chess, ChessBackend},
+    },
 };
 
 impl Chess {
     pub async fn new(online: bool, game_id: String) -> Result<Chess, Box<dyn std::error::Error>> {
-        let backend = match online {
+        let backend: ChessBackend = match online {
             true => {
                 // Authenticate
 
                 let auth = get_authenticated().await.unwrap();
 
-                BoardAPI::new(game_id, auth)
+                let board_api = BoardAPI::new(game_id, auth).await?;
+                ChessBackend::Online(board_api)
             }
-            false => BoardLocal::new(game_id),
+            false => {
+                let board_local = BoardLocal::new(game_id).await;
+                ChessBackend::Offline(board_local)
+            }
         };
 
         // TODO: implement UI conenction and start x11 window here
