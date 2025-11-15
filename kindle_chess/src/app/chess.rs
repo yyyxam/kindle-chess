@@ -6,14 +6,11 @@
 
 use crate::{
     api::oauth::get_authenticated,
-    models::{
-        board::BoardAPI,
-        chess::{Chess, ChessBackend, LocalBoardAPI},
-    },
+    models::{board_api::BoardAPI, board_local::BoardLocal, chess::Chess},
 };
 
 impl Chess {
-    pub async fn new(online: bool) -> Result<Chess, Box<dyn std::error::Error>> {
+    pub async fn new(online: bool, game_id: String) -> Result<Chess, Box<dyn std::error::Error>> {
         let backend = match online {
             true => {
                 // Authenticate
@@ -22,8 +19,10 @@ impl Chess {
 
                 BoardAPI::new(game_id, auth)
             }
-            false => LocalBoardAPI::new,
+            false => BoardLocal::new(game_id),
         };
+
+        // TODO: implement UI conenction and start x11 window here
         Ok(Self { backend: backend })
     }
 }

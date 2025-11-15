@@ -1,6 +1,8 @@
 use crate::api::oauth::authenticated_request;
 use crate::app::game::{get_turn_input, player0_turn};
-use crate::models::board::{BoardAPI, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent};
+use crate::models::board_api::{
+    BoardAPI, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent,
+};
 use crate::models::oauth::{HttpMethod, LichessUser, TokenInfo};
 use futures::StreamExt;
 use log::{info, warn};

@@ -15,7 +15,7 @@ pub mod models;
 
 use crate::api::board::get_ongoing_games;
 use crate::api::oauth::get_authenticated;
-use crate::models::board::BoardAPI;
+use crate::models::board_api::BoardAPI;
 
 #[tokio::main]
 async fn main() {

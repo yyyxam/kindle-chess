@@ -1,12 +1,11 @@
-use crate::models::board::BoardAPI;
+use crate::models::board_api::BoardAPI;
+use crate::models::board_local::BoardLocal;
 
 pub struct Chess {
     pub backend: ChessBackend,
 }
 
-pub struct LocalBoardAPI {}
-
 pub enum ChessBackend {
-    Offline(LocalBoardAPI),
+    Offline(BoardLocal),
     Online(BoardAPI),
 }

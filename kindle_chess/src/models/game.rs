@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::board::Performance;
+use crate::models::board_api::Performance;
 
 // ~~~~~~~~~~~~~~~~ GAME ~~~~~~~~~~~~~~~~
 #[derive(Serialize, Deserialize, Debug)]
