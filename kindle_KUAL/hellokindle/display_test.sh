@@ -18,7 +18,7 @@ echo "Using DISPLAY=$DISPLAY"
 
 # Run the test
 echo "Starting chess test..."
-./bin/kindle-x11-test > /tmp/chess_test.log 2>&1 &
+./bin/test_ui > /tmp/chess_test.log 2>&1 &
 echo $! > /tmp/chess_test.pid
 
 echo "Started with PID: $(cat /tmp/chess_test.pid)"

@@ -1,12 +1,12 @@
 #!/bin/sh
 
-cd kindle_chess_ui
+cd kindle_chess
 
 echo "Building Binaries"
 podman run --rm -v "$PWD":/workspace:Z -w /workspace --env CARGO_NET_OFFLINE=false docker.io/messense/rust-musl-cross:arm-musleabi cargo build --release --target arm-unknown-linux-musleabi
 
 echo "Copying Binaries to local KUAL-App"
-yes | cp -r ./target/arm-unknown-linux-musleabi/release/kindle-x11-test ../kindle_KUAL/hellokindle/bin/
+yes | cp -r ./target/arm-unknown-linux-musleabi/release/test_ui ../kindle_KUAL/hellokindle/bin/
 
 cd ..
 

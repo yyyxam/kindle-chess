@@ -1,11 +1,12 @@
 [package]
-name = "kindli_hello"
+name = "kindli_chess"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 axum = "0.8.4"
 exitfailure = "0.5.1"
+env_logger = { version = "0.11", default-features = false }
 image = "0.25.8"
 futures = "0.3.31"
 local-ip-address = "0.6.5"
@@ -22,6 +23,9 @@ tokio-util = "0.7.16"
 tower-http = { version = "0.5", features = ["cors"] }
 url = "2.5.7"
 uuid = { version = "1.18.1", features = ["v4"]}
+x11rb = { version = "0.13", default-features = false }
+dotenv = "0.15"
+
 
 [build-dependencies]
 dotenv = "0.15"

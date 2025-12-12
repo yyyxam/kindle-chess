@@ -1,4 +1,5 @@
 use log::LevelFilter;
+use log::error;
 use log::info;
 use log4rs::Handle;
 use log4rs::append::file::FileAppender;
@@ -13,10 +14,12 @@ pub mod api {
 pub mod app;
 pub mod local;
 pub mod models;
+pub mod ui;
 
 use crate::api::board::get_ongoing_games;
 use crate::api::oauth::get_authenticated;
 use crate::models::board_api::BoardAPI;
+use crate::ui::ChessApp;
 
 #[tokio::main]
 async fn main() {
@@ -27,14 +30,25 @@ async fn main() {
     // Get 5 most urgent games - assuming urgency = oldest / depending on gamemode
     let on_games = get_ongoing_games(&auth.0, 5).await.unwrap().now_playing;
     for game in &on_games {
-        println!("Retrieved game-id {}", &game.full_id);
+        info!("Retrieved game-id {}", &game.full_id);
     }
     let game_id = on_games[0].full_id.clone();
-    println!("Streaming game id: {}", &game_id);
+    info!("Streaming game id: {}", &game_id);
 
     let mut board = BoardAPI::new(game_id, auth).await.unwrap();
 
-    board.stream_game_event().await.unwrap();
+    // board.stream_game_event().await.unwrap();
+    // Run the app
+    match ChessApp::new(online = true, game_id = game_id) {
+        Ok(app) => {
+            if let Err(e) = app.run() {
+                error!("Application error: {}", e);
+            }
+        }
+        Err(e) => {
+            error!("Failed to initialize: {}", e);
+        }
+    }
 }
 
 fn init_log() -> Handle {
