@@ -2,7 +2,7 @@ use crate::events::{AppEvent, ChessMove, Rectangle, Square, TouchEvent, TouchKin
 use crate::renderer::{DrawColor, Renderer};
 use log::info;
 
-const SQUARE_SIZE: u16 = 134; // 1072 / 8
+const SQUARE_SIZE: u16 = 134; // 1072 / 8 bit
 
 pub struct BoardWidget {
     area: Rectangle,
@@ -29,14 +29,13 @@ impl BoardWidget {
         // Convert to board coordinates
         let board_x = touch.x - self.area.x;
         let board_y = touch.y - self.area.y;
-
+        // Convert to Square
         let file = (board_x / SQUARE_SIZE as i16) as u8;
         let rank = 7 - (board_y / SQUARE_SIZE as i16) as u8;
-
+        // Ignore if outside of board (might be redundant bc of "area.contains"-check before)
         if file > 7 || rank > 7 {
             return None;
         }
-
         let square = Square::new(
             if self.flipped { 7 - file } else { file },
             if self.flipped { 7 - rank } else { rank },
@@ -44,6 +43,7 @@ impl BoardWidget {
 
         match touch.kind {
             TouchKind::Down => {
+                // = HOLD?
                 info!("Board touched at {}", square.to_algebraic());
                 self.last_touch = Some((touch.x, touch.y));
 
@@ -55,9 +55,10 @@ impl BoardWidget {
                             to: square,
                         };
                         self.selected_square = None;
+                        // TODO: Move-Validity-Check? Or in App?
                         return Some(AppEvent::MoveMade(chess_move));
                     } else {
-                        // Deselect
+                        // Deselect if selected field is touched again
                         self.selected_square = None;
                     }
                 } else {
@@ -67,6 +68,7 @@ impl BoardWidget {
                 }
             }
             TouchKind::Up => {
+                // Reset field when finger is removed again ?
                 self.last_touch = None;
             }
             _ => {}
