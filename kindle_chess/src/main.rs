@@ -18,8 +18,7 @@ pub mod ui;
 
 use crate::api::board::get_ongoing_games;
 use crate::api::oauth::get_authenticated;
-use crate::models::board_api::BoardAPI;
-use crate::ui::ChessApp;
+use crate::models::chess::ChessApp;
 
 #[tokio::main]
 async fn main() {
@@ -35,18 +34,18 @@ async fn main() {
     let game_id = on_games[0].full_id.clone();
     info!("Streaming game id: {}", &game_id);
 
-    let mut board = BoardAPI::new(game_id, auth).await.unwrap();
-
+    // let mut board = BoardAPI::new(game_id, auth).await.unwrap();
     // board.stream_game_event().await.unwrap();
+    //
     // Run the app
-    match ChessApp::new(online = true, game_id = game_id) {
+    match ChessApp::new(true, game_id).await {
         Ok(app) => {
             if let Err(e) = app.run() {
                 error!("Application error: {}", e);
             }
         }
         Err(e) => {
-            error!("Failed to initialize: {}", e);
+            error!("Failed to initialize ChessApp: {}", e);
         }
     }
 }

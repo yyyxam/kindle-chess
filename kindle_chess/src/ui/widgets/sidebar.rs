@@ -1,4 +1,4 @@
-use crate::ui::events::{AppEvent, Rectangle, TouchEvent, TouchKind};
+use crate::ui::events::{AppEvent, Rectangle, RectangleExt, TouchEvent, TouchKind};
 use crate::ui::renderer::{DrawColor, Renderer};
 use log::info;
 

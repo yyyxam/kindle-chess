@@ -1,4 +1,6 @@
-use crate::ui::events::{AppEvent, ChessMove, Rectangle, Square, TouchEvent, TouchKind};
+use crate::ui::events::{
+    AppEvent, ChessMove, Rectangle, RectangleExt, Square, TouchEvent, TouchKind,
+};
 use crate::ui::renderer::{DrawColor, Renderer};
 use log::info;
 
@@ -86,8 +88,8 @@ impl BoardWidget {
                     DrawColor::LightGray
                 };
 
-                let x = self.area.x as i32 + (file * SQUARE_SIZE) as i32;
-                let y = self.area.y as i32 + ((7 - rank) * SQUARE_SIZE) as i32;
+                let x = self.area.x as i16 + (file * SQUARE_SIZE) as i16;
+                let y = self.area.y as i16 + ((7 - rank) * SQUARE_SIZE) as i16;
 
                 renderer.draw_rectangle(
                     Rectangle::new(x, y, SQUARE_SIZE, SQUARE_SIZE),
@@ -113,8 +115,8 @@ impl BoardWidget {
                 square.rank
             };
 
-            let x = self.area.x as i32 + (file as i32 * SQUARE_SIZE) as i32;
-            let y = self.area.y as i32 + ((7 - rank) as i32 * SQUARE_SIZE) as i32;
+            let x = self.area.x as i16 + (file as i16 * SQUARE_SIZE as i16) as i16;
+            let y = self.area.y as i16 + ((7 - rank) as i16 * SQUARE_SIZE as i16) as i16;
 
             // Draw selection border
             for i in 0..3 {
@@ -122,8 +124,8 @@ impl BoardWidget {
                     Rectangle::new(
                         x as i16 + i,
                         y as i16 + i,
-                        (SQUARE_SIZE - (i * 2)) as u16,
-                        (SQUARE_SIZE - (i * 2)) as u16,
+                        (SQUARE_SIZE - (i as u16 * 2)) as u16,
+                        (SQUARE_SIZE - (i as u16 * 2)) as u16,
                     ),
                     DrawColor::Black,
                     false,
@@ -133,19 +135,19 @@ impl BoardWidget {
 
         // Draw touch indicator
         if let Some((tx, ty)) = self.last_touch {
-            renderer.draw_circle(tx as i32, ty as i32, 30, DrawColor::Gray)?;
+            renderer.draw_circle(tx as i16, ty as i16, 30, DrawColor::Gray)?;
             renderer.draw_line(
-                tx as i32 - 40,
-                ty as i32,
-                tx as i32 + 40,
-                ty as i32,
+                tx as i16 - 40,
+                ty as i16,
+                tx as i16 + 40,
+                ty as i16,
                 DrawColor::Gray,
             )?;
             renderer.draw_line(
-                tx as i32,
-                ty as i32 - 40,
-                tx as i32,
-                ty as i32 + 40,
+                tx as i16,
+                ty as i16 - 40,
+                tx as i16,
+                ty as i16 + 40,
                 DrawColor::Gray,
             )?;
         }

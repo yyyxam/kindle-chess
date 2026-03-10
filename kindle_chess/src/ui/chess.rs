@@ -1,8 +1,8 @@
 use crate::api::oauth::get_authenticated;
 use crate::models::board_api::BoardAPI;
 use crate::models::board_local::BoardLocal;
-use crate::models::chess::ChessBackend;
-use crate::ui::events::{AppEvent, Rectangle, TouchEvent, TouchKind};
+use crate::models::chess::{ChessBackend, ChessUI};
+use crate::ui::events::{AppEvent, Rectangle, RectangleExt, TouchEvent, TouchKind};
 use crate::ui::renderer::Renderer;
 use crate::ui::widgets::board::BoardWidget;
 use crate::ui::widgets::sidebar::SidebarWidget;
@@ -14,39 +14,8 @@ use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::protocol::Event as X11Event;
 
-pub struct ChessApp {
-    backend: ChessBackend,
-    renderer: Renderer,
-    conn: Arc<x11rb::rust_connection::RustConnection>, // Using std::sync::Arc
-    event_tx: Sender<AppEvent>,
-    event_rx: Receiver<AppEvent>,
-
-    // Widgets
-    board: BoardWidget,
-    sidebar: SidebarWidget,
-
-    // Triple-tap detection for emergency exit
-    tap_times: Vec<Instant>,
-    last_tap_pos: Option<(i16, i16)>,
-}
-
-impl ChessApp {
-    pub async fn new(online: bool, game_id: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let backend: ChessBackend = match online {
-            true => {
-                // Authenticate
-
-                let auth = get_authenticated().await.unwrap();
-
-                let board_api = BoardAPI::new(game_id, auth).await?;
-                ChessBackend::Online(board_api)
-            }
-            false => {
-                let board_local = BoardLocal::new(game_id).await;
-                ChessBackend::Offline(board_local)
-            }
-        };
-
+impl ChessUI {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, rx) = mpsc::channel();
 
         // Get both renderer and shared connection
@@ -57,7 +26,6 @@ impl ChessApp {
         let sidebar_area = Rectangle::new(0, 1072, 1072, 376);
 
         Ok(Self {
-            backend,
             renderer,
             conn,
             event_tx: tx,
@@ -108,7 +76,7 @@ impl ChessApp {
             }
         }
 
-        info!("Application shutting down");
+        info!("ChessUI shutting down");
         Ok(())
     }
 

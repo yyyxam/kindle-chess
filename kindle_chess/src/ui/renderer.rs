@@ -1,10 +1,10 @@
-use crate::events::Rectangle;
+use crate::ui::events::RectangleExt;
 use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::Arc as StdArc;
+use x11rb::COPY_DEPTH_FROM_PARENT;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{self, *};
-use x11rb::COPY_DEPTH_FROM_PARENT; // Rename to avoid collision
 
 pub struct Renderer {
     conn: StdArc<x11rb::rust_connection::RustConnection>,
@@ -24,8 +24,8 @@ pub enum DrawColor {
 }
 
 impl Renderer {
-    pub fn new(
-    ) -> Result<(Self, StdArc<x11rb::rust_connection::RustConnection>), Box<dyn std::error::Error>>
+    pub fn new()
+    -> Result<(Self, StdArc<x11rb::rust_connection::RustConnection>), Box<dyn std::error::Error>>
     {
         // Connect to X11
         let (conn, screen_num) = match x11rb::connect(Some(":0.0")) {
@@ -120,27 +120,9 @@ impl Renderer {
         let gc = self.gcs[&color];
 
         if filled {
-            self.conn.poly_fill_rectangle(
-                self.window,
-                gc,
-                &[xproto::Rectangle {
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height,
-                }],
-            )?;
+            self.conn.poly_fill_rectangle(self.window, gc, &[rect])?;
         } else {
-            self.conn.poly_rectangle(
-                self.window,
-                gc,
-                &[xproto::Rectangle {
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height,
-                }],
-            )?;
+            self.conn.poly_rectangle(self.window, gc, &[rect])?;
         }
 
         self.dirty = true;

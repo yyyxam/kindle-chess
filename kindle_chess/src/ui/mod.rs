@@ -1,7 +1,4 @@
-pub mod app;
+pub mod chess;
 pub mod events;
 pub mod renderer;
-pub mod ui;
 pub mod widgets;
-
-pub use app::ChessApp;
