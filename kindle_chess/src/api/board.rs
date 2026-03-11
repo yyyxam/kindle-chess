@@ -16,8 +16,8 @@ impl BoardAPI {
         Ok(Self {
             token: auth.0,
             user: auth.1,
-            // game_id: game_id,
             // These should all get updated with the start of the game-state-stream
+            game_id: None,
             white: None,
             black: None,
             player0_white: false,
@@ -25,13 +25,19 @@ impl BoardAPI {
         })
     }
 
-    pub async fn move_piece(
-        &self,
-        game_id: &String,
-        board_move: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn move_piece(&self, board_move: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let game_id = match &self.game_id {
+            Some(game_id) => {
+                info!("Trying to send API call to move piece for game {}", game_id);
+                game_id
+            }
+            _ => {
+                warn!("No game_id provided for making the move");
+                "NO-GAME-ID"
+            }
+        };
         let url = format!(
-            "{}/board/game/{}/move/{}",
+            "{:?}/board/game/{}/move/{}",
             env!("LICHESS_API_BASE"),
             game_id,
             board_move
@@ -51,8 +57,12 @@ impl BoardAPI {
         Ok(())
     }
 
-    pub async fn resign_game(&self, game_id: &String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resign_game(&self) -> Result<(), Box<dyn std::error::Error>> {
         /*!Endpoint for resigning a game.*/
+        let game_id = match &self.game_id {
+            Some(game_id) => game_id,
+            _ => "NO-GAME-ID",
+        };
         let url = format!("{}/board/game/{}/resign", env!("LICHESS_API_BASE"), game_id);
 
         let response = authenticated_request(url, &self.token, HttpMethod::POST)
@@ -68,11 +78,13 @@ impl BoardAPI {
         Ok(())
     }
 
-    pub async fn abort_game(&self, game_id: &String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn abort_game(&self) -> Result<(), Box<dyn std::error::Error>> {
         /*!Endpoint for aborting a game.
-        Params:
-            game_id: &String - does things
-        */
+         */
+        let game_id = match &self.game_id {
+            Some(game_id) => game_id,
+            _ => "NO-GAME-ID",
+        };
         let url = format!("{}/board/game/{}/abort", env!("LICHESS_API_BASE"), game_id);
 
         let response = authenticated_request(url, &self.token, HttpMethod::POST)
@@ -95,11 +107,12 @@ impl BoardAPI {
          * = New line = new event;
          * Tries to parse from stream to EventTypes.
          */
-        let url = format!(
-            "{}/board/game/stream/{}",
-            env!("LICHESS_API_BASE"),
-            self.game_id
-        );
+
+        let game_id = match &self.game_id {
+            Some(game_id) => game_id,
+            _ => "NO-GAME-ID",
+        };
+        let url = format!("{}/board/game/stream/{}", env!("LICHESS_API_BASE"), game_id);
 
         info!("Game-State-Stream started..");
 
@@ -174,10 +187,7 @@ impl BoardAPI {
                     // TODO (#22): refactor this (to >Game< maybe?)
                     // TODO: this should somehow check
                     loop {
-                        match self
-                            .move_piece(&self.game_id, get_turn_input().await.as_str())
-                            .await
-                        {
+                        match self.move_piece(get_turn_input().await.as_str()).await {
                             Ok(_) => {
                                 info!("Piece was moved");
                                 break;
@@ -210,7 +220,7 @@ impl BoardAPI {
                     loop {
                         match self
                             // If so, get input, translate it to turn
-                            .move_piece(&self.game_id, get_turn_input().await.as_str())
+                            .move_piece(get_turn_input().await.as_str())
                             .await
                         {
                             Ok(_) => {
@@ -285,34 +295,34 @@ impl BoardAPI {
         }
         Ok(())
     }
-}
 
-pub async fn get_ongoing_games(
-    auth_token: &TokenInfo,
-    n: u8,
-) -> Result<GameDataList, Box<dyn std::error::Error>> {
-    /*!Endpoint for listing [n] ongoing games.
-     * n must be in [1..50].
-     * Results are ordered and chosen by 'urgency'
-     * */
-    let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
-    let response = authenticated_request(url, auth_token, HttpMethod::GET).await?;
+    pub async fn get_ongoing_games(
+        &self,
+        n: u8,
+    ) -> Result<GameDataList, Box<dyn std::error::Error>> {
+        /*!Endpoint for listing [n] ongoing games.
+         * n must be in [1..50].
+         * Results are ordered and chosen by 'urgency'
+         * */
+        let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
+        let response = authenticated_request(url, &self.token, HttpMethod::GET).await?;
 
-    if !&response.status().is_success() {
-        return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
+        if !&response.status().is_success() {
+            return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
+        }
+
+        let bytes = response.bytes().await?;
+
+        let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
+            // Print the raw response for debugging
+            warn!(
+                "Failed to parse JSON. Raw response: {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            warn!("Parse error: {}", e);
+            e
+        })?;
+        info!("The received and parsed data {:?}", data);
+        Ok(data)
     }
-
-    let bytes = response.bytes().await?;
-
-    let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
-        // Print the raw response for debugging
-        warn!(
-            "Failed to parse JSON. Raw response: {}",
-            String::from_utf8_lossy(&bytes)
-        );
-        warn!("Parse error: {}", e);
-        e
-    })?;
-    info!("The received and parsed data {:?}", data);
-    Ok(data)
 }

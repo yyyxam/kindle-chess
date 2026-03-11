@@ -1,0 +1,12 @@
+2026-03-11T12:11:30.698957734+01:00 - Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.
+2026-03-11T12:11:30.699037136+01:00 - No token found.. Starting authentication process
+2026-03-11T12:11:30.699447052+01:00 - Starting OAuth2 authentication flow...
+2026-03-11T12:11:30.700880461+01:00 - Please visit the following URL to authenticate:
+2026-03-11T12:11:30.700883587+01:00 - https://lichess.org/oauth?response_type=code&client_id=lichess-rust-client-a27b461d-f558-4829-873c-4f93345dfcda&state=Vi9jGptmyd1eK3ijZqhRvg&code_challenge=YGgz_0J_5eg45h-6R6WPGGBYiEkJxY9IjCL4i0HTFAk&code_challenge_method=S256&redirect_uri=http%3A%2F%2F192.168.2.216%3A8080%2Fcallback&scope=challenge%3Aread+challenge%3Awrite+bot%3Aplay+board%3Aplay
+2026-03-11T12:11:30.735803717+01:00 - Printing generated QR-code with eips
+2026-03-11T14:36:34.198307804+01:00 - Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.
+2026-03-11T14:36:34.198385362+01:00 - No token found.. Starting authentication process
+2026-03-11T14:36:34.198766590+01:00 - Starting OAuth2 authentication flow...
+2026-03-11T14:36:34.198785877+01:00 - Please visit the following URL to authenticate:
+2026-03-11T14:36:34.198789504+01:00 - https://lichess.org/oauth?response_type=code&client_id=lichess-rust-client-43c9ff0f-236e-46ae-8c17-bcd6c365d525&state=pRITaHKqyND6yIv7EYyGNA&code_challenge=XrTFQEqOURKZQomkrBxKHROCHRgqASy1dBAs3JeeIAY&code_challenge_method=S256&redirect_uri=http%3A%2F%2F192.168.2.216%3A8080%2Fcallback&scope=challenge%3Aread+challenge%3Awrite+bot%3Aplay+board%3Aplay
+2026-03-11T14:36:34.231956271+01:00 - Printing generated QR-code with eips

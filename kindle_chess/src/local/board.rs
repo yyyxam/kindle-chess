@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::models::board_local::BoardLocal;
 
 impl BoardLocal {
@@ -11,9 +13,12 @@ impl BoardLocal {
         let white = true; // TODO: get player0 color from local savegame
 
         Self {
-            game_id: game_id,
+            // game_id: game_id,
             player0_turn: turn,
             player0_white: white,
         }
+    }
+    pub async fn get_ongoing_games() {
+        info!("Not implemented")
     }
 }

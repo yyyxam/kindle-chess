@@ -38,11 +38,6 @@ impl ChessUI {
     }
 
     pub fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Starting Chess UI");
-        info!("Touch chess board to select/move pieces");
-        info!("Touch bottom area buttons to navigate");
-        info!("Triple-tap anywhere to emergency exit");
-
         // Spawn X11 event listener with the shared connection
         self.spawn_x11_listener();
 
@@ -77,113 +72,6 @@ impl ChessUI {
         }
 
         info!("ChessUI shutting down");
-        Ok(())
-    }
-
-    fn handle_event(&mut self, event: AppEvent) -> Result<bool, Box<dyn std::error::Error>> {
-        match event {
-            AppEvent::Touch(touch) => {
-                // Check triple-tap for emergency exit
-                if self.check_triple_tap(&touch) {
-                    info!("Triple-tap detected - emergency exit!");
-                    return Ok(false);
-                }
-
-                // Handle touch in widgets
-                if let Some(event) = self.board.handle_touch(&touch) {
-                    return self.handle_event(event);
-                }
-
-                if let Some(event) = self.sidebar.handle_touch(&touch) {
-                    return self.handle_event(event);
-                }
-
-                self.render()?;
-            }
-
-            AppEvent::MoveMade(chess_move) => {
-                info!(
-                    "Move: {} -> {}",
-                    chess_move.from.to_algebraic(),
-                    chess_move.to.to_algebraic() // TODO send move to backend
-                );
-                self.render()?;
-            }
-
-            AppEvent::SquareSelected(square) => {
-                info!("Selected square: {}", square.to_algebraic());
-                self.render()?;
-            }
-
-            AppEvent::ShowMenu => {
-                info!("Menu requested");
-                // TODO: Show menu overlay
-            }
-
-            AppEvent::Expose => {
-                debug!("Expose event - redrawing");
-                self.render()?;
-            }
-
-            AppEvent::WindowUnmapped => {
-                warn!("Window unmapped!");
-                // Try to remap?
-            }
-
-            AppEvent::Quit => {
-                info!("Quit requested");
-                return Ok(false);
-            }
-
-            _ => {}
-        }
-
-        Ok(true)
-    }
-
-    fn check_triple_tap(&mut self, touch: &TouchEvent) -> bool {
-        if touch.kind != TouchKind::Down {
-            return false;
-        }
-
-        let now = Instant::now();
-        let tap_pos = (touch.x, touch.y);
-
-        // Check if close to last tap
-        if let Some(last_pos) = self.last_tap_pos {
-            let dx = (tap_pos.0 - last_pos.0).abs();
-            let dy = (tap_pos.1 - last_pos.1).abs();
-
-            if dx <= 50 && dy <= 50 {
-                self.tap_times.push(now);
-
-                // Remove old taps
-                self.tap_times
-                    .retain(|t| now.duration_since(*t) < Duration::from_millis(500));
-
-                if self.tap_times.len() >= 3 {
-                    return true;
-                }
-            } else {
-                // Too far, reset
-                self.tap_times.clear();
-                self.tap_times.push(now);
-                self.last_tap_pos = Some(tap_pos);
-            }
-        } else {
-            // First tap
-            self.tap_times.clear();
-            self.tap_times.push(now);
-            self.last_tap_pos = Some(tap_pos);
-        }
-
-        false
-    }
-
-    fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.board.render(&mut self.renderer)?;
-        self.sidebar.render(&mut self.renderer)?;
-        self.renderer.present()?;
         Ok(())
     }
 

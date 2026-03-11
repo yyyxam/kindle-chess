@@ -9,7 +9,10 @@ use crate::{
     models::{
         board_api::BoardAPI,
         board_local::BoardLocal,
-        chess::{ChessApp, ChessBackend, ChessUI},
+        chess::{
+            ChessApp,
+            ChessBackend::{self},
+        },
     },
 };
 
@@ -30,26 +33,45 @@ impl ChessApp {
                 // ....
                 // 3. Exit App
                 //
-                // For now, just start the most recent online game
+
                 let auth = get_authenticated().await.unwrap();
-                let mut board_api = BoardAPI::new(auth).await?;
+                let board_api = BoardAPI::new(auth).await?;
                 // board_api.stream_game_event().await.unwrap();
                 ChessBackend::Online(board_api)
             }
             false => {
-                let board_local = BoardLocal::new(game_id).await;
+                // TODO: implement local game engine with id system and pass a proper game_id below
+                let board_local = BoardLocal::new(String::new()).await;
                 ChessBackend::Offline(board_local)
             }
         };
 
-        // INIT ui — only construct here, do NOT call run() yet
-        let ui: ChessUI = ChessUI::new().await?;
-
-        Ok(Self { backend, ui })
+        Ok(Self { backend })
     }
 
-    /// Starts the UI event loop. Consumes the ChessApp since ChessUI::run() consumes self.
-    pub fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        self.ui.run()
+    // Getter for the API
+    fn board_api(&mut self) -> Option<&mut BoardAPI> {
+        match &mut self.backend {
+            ChessBackend::Offline(_) => None,
+            ChessBackend::Online(board_api) => Some(board_api),
+        }
     }
+
+    // pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    //     /* Starts the ChessGameScreen (TODO) and loads/starts a game into the backend (TODO).
+    //      * For now, crudely checks if it's an online game and if so, passes game_id of most recent game to stream it
+    //      */
+    //     let is_online = matches!(self.backend, ChessBackend::Online(_));
+
+    //     let on_games: GameDataList;
+    //     if let Some(api) = self.board_api() {
+    //         let on_games = api.get_ongoing_games(5).await.unwrap().now_playing;
+    //     };
+    //     for game in &on_games {
+    //         info!("Retrieved game-id {}", &game.full_id);
+    //     }
+    //     let game_id = on_games[0].full_id.clone();
+    //     info!("Streaming game id: {}", &game_id);
+    //     Ok(())
+    // }
 }

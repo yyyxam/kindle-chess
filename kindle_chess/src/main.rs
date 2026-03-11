@@ -16,8 +16,6 @@ pub mod local;
 pub mod models;
 pub mod ui;
 
-use crate::api::board::get_ongoing_games;
-use crate::api::oauth::get_authenticated;
 use crate::models::chess::ChessApp;
 
 #[tokio::main]
