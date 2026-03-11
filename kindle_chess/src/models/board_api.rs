@@ -11,7 +11,7 @@ use crate::models::{
 pub struct BoardAPI {
     pub token: TokenInfo,
     pub user: LichessUser, // =
-    pub game_id: String,
+    // pub game_id: String,
     pub white: Option<PlayedBy>,
     pub black: Option<PlayedBy>,
     pub player0_white: bool, // if true then player0 had first turn

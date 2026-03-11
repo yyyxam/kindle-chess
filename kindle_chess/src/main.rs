@@ -24,21 +24,11 @@ use crate::models::chess::ChessApp;
 async fn main() {
     init_log();
 
-    let auth = get_authenticated().await.unwrap();
-
-    // Get 5 most urgent games - assuming urgency = oldest / depending on gamemode
-    let on_games = get_ongoing_games(&auth.0, 5).await.unwrap().now_playing;
-    for game in &on_games {
-        info!("Retrieved game-id {}", &game.full_id);
-    }
-    let game_id = on_games[0].full_id.clone();
-    info!("Streaming game id: {}", &game_id);
-
     // let mut board = BoardAPI::new(game_id, auth).await.unwrap();
     // board.stream_game_event().await.unwrap();
     //
     // Run the app
-    match ChessApp::new(true, game_id).await {
+    match ChessApp::new(true).await {
         Ok(app) => {
             if let Err(e) = app.run() {
                 error!("Application error: {}", e);

@@ -10,13 +10,13 @@ use reqwest_streams::JsonStreamResponse;
 
 impl BoardAPI {
     pub async fn new(
-        game_id: String,
+        // game_id: String,
         auth: (TokenInfo, LichessUser),
     ) -> Result<BoardAPI, Box<dyn std::error::Error>> {
         Ok(Self {
             token: auth.0,
             user: auth.1,
-            game_id: game_id,
+            // game_id: game_id,
             // These should all get updated with the start of the game-state-stream
             white: None,
             black: None,

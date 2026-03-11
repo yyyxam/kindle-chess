@@ -14,10 +14,7 @@ use crate::{
 };
 
 impl ChessApp {
-    pub async fn new(
-        online: bool,
-        game_id: String,
-    ) -> Result<ChessApp, Box<dyn std::error::Error>> {
+    pub async fn new(online: bool) -> Result<ChessApp, Box<dyn std::error::Error>> {
         // INIT backend
         let backend: ChessBackend = match online {
             true => {
@@ -35,8 +32,8 @@ impl ChessApp {
                 //
                 // For now, just start the most recent online game
                 let auth = get_authenticated().await.unwrap();
-                let mut board_api = BoardAPI::new(game_id, auth).await?;
-                board_api.stream_game_event().await.unwrap();
+                let mut board_api = BoardAPI::new(auth).await?;
+                // board_api.stream_game_event().await.unwrap();
                 ChessBackend::Online(board_api)
             }
             false => {
