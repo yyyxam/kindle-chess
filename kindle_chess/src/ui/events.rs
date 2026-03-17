@@ -1,8 +1,17 @@
 use std::time::Duration;
 use x11rb::protocol::xproto;
 
+use crate::models::{
+    chess::ChessApp,
+    oauth::{LichessUser, TokenInfo},
+};
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
+    // Authentication Events
+    AuthSuccess(TokenInfo, LichessUser),
+    AuthFailed(String),
+
     // UI Events
     Touch(TouchEvent),
     Redraw,
@@ -15,6 +24,7 @@ pub enum AppEvent {
     // Navigation
     ShowMenu,
     ExitToMenu,
+    ChessReady(ChessApp),
     Quit,
 
     // X11 Events

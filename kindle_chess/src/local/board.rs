@@ -3,7 +3,7 @@ use log::info;
 use crate::models::board_local::BoardLocal;
 
 impl BoardLocal {
-    pub async fn new(game_id: String) -> BoardLocal {
+    pub fn new(game_id: String) -> BoardLocal {
         println!(
             "Would start local game {}... If it were implemented",
             game_id,

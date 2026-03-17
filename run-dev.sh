@@ -134,47 +134,61 @@ if [[ ! -x "$BINARY" ]]; then
     exit 1
 fi
 
-# ── Start Xvfb ───────────────────────────────────────────────────────────────
-# Clean up any stale lock from a previous crash
-if [[ -e "/tmp/.X${DISPLAY_NUM}-lock" ]]; then
-    echo "→ Removing stale Xvfb lock on $VDISPLAY..."
-    rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
-fi
+# ── Start display server ──────────────────────────────────────────────────────
+# Xephyr is itself a nested X server — it doesn't need Xvfb.
+# Xvfb is only needed for x11vnc, feh (screenshot loop), and headless mode.
 
-echo "→ Starting Xvfb on $VDISPLAY (${KINDLE_W}x${KINDLE_H}x16, ${KINDLE_DPI}dpi)..."
-Xvfb "$VDISPLAY" \
-    -screen 0 "${KINDLE_W}x${KINDLE_H}x16" \
-    -dpi "$KINDLE_DPI" \
-    -ac \
-    &>/tmp/xvfb-kindle.log &
-XVFB_PID=$!
+start_xvfb() {
+    # Clean up any stale lock from a previous crash
+    if [[ -e "/tmp/.X${DISPLAY_NUM}-lock" ]]; then
+        echo "→ Removing stale Xvfb lock on $VDISPLAY..."
+        rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
+    fi
 
-# Wait for the socket to appear (up to 3 s)
-for i in $(seq 1 30); do
-    [[ -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ]] && break
-    sleep 0.1
-done
+    echo "→ Starting Xvfb on $VDISPLAY (${KINDLE_W}x${KINDLE_H}x16, ${KINDLE_DPI}dpi)..."
+    Xvfb "$VDISPLAY" \
+        -screen 0 "${KINDLE_W}x${KINDLE_H}x16" \
+        -dpi "$KINDLE_DPI" \
+        -ac \
+        &>/tmp/xvfb-kindle.log &
+    XVFB_PID=$!
 
-if ! kill -0 "$XVFB_PID" 2>/dev/null; then
-    echo "ERROR: Xvfb failed to start. See /tmp/xvfb-kindle.log"
-    exit 1
-fi
-echo "   Xvfb PID: $XVFB_PID"
+    # Wait for the socket to appear (up to 3 s)
+    for i in $(seq 1 30); do
+        [[ -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ]] && break
+        sleep 0.1
+    done
+
+    if ! kill -0 "$XVFB_PID" 2>/dev/null; then
+        echo "ERROR: Xvfb failed to start. See /tmp/xvfb-kindle.log"
+        exit 1
+    fi
+    echo "   Xvfb PID: $XVFB_PID"
+}
 
 # ── Start viewer ──────────────────────────────────────────────────────────────
 case "$VIEWER" in
 
     xephyr)
         need Xephyr "sudo pacman -S xorg-server-xephyr"
-        echo "→ Opening Xephyr window..."
-        # -screen:  match the Kindle framebuffer exactly
-        # No -parent flag: run as a standalone top-level window
-        # -glamor is optional (hardware-accelerated compositing); drop it if it errors
+        need Xvfb   "sudo pacman -S xorg-server-xvfb"
+
+        # Xephyr is its own display server — it serves $VDISPLAY itself and
+        # renders into a window on the real desktop ($DISPLAY).
+        # Clean up any stale lock first.
+        if [[ -e "/tmp/.X${DISPLAY_NUM}-lock" ]]; then
+            echo "→ Removing stale lock on $VDISPLAY..."
+            rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
+        fi
+
+        echo "→ Opening Xephyr window (serving $VDISPLAY, ${KINDLE_W}x${KINDLE_H}, ${KINDLE_DPI}dpi)..."
+        # -glamor is optional (hardware-accelerated compositing); drop it if unsupported
         XEPHYR_EXTRA=()
         Xephyr -help 2>&1 | grep -q -- '-glamor' && XEPHYR_EXTRA+=(-glamor)
 
         Xephyr \
             -screen "${KINDLE_W}x${KINDLE_H}" \
+            -dpi "$KINDLE_DPI" \
             -title "$WIN_TITLE" \
             -resizeable \
             -host-cursor \
@@ -182,12 +196,20 @@ case "$VIEWER" in
             "$VDISPLAY" \
             &>/tmp/xephyr-kindle.log &
         VIEWER_PID=$!
-        sleep 0.8   # give Xephyr time to open its own display connection
+
+        # Wait for the Xephyr socket to appear (up to 3 s)
+        for i in $(seq 1 30); do
+            [[ -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ]] && break
+            sleep 0.1
+        done
+
         if ! kill -0 "$VIEWER_PID" 2>/dev/null; then
             echo "WARNING: Xephyr exited unexpectedly. See /tmp/xephyr-kindle.log"
-            echo "  Falling back to headless mode."
+            cat /tmp/xephyr-kindle.log >&2
+            echo "  Falling back to Xvfb + headless mode."
             VIEWER="none"
             VIEWER_PID=""
+            start_xvfb
         else
             echo "   Xephyr PID: $VIEWER_PID"
         fi
@@ -195,6 +217,7 @@ case "$VIEWER" in
 
     x11vnc)
         need x11vnc "yay -S x11vnc"
+        start_xvfb
         VNC_PORT=5999
         echo "→ Starting x11vnc on localhost:$VNC_PORT..."
         x11vnc \
@@ -220,6 +243,7 @@ case "$VIEWER" in
     feh)
         need feh  "sudo pacman -S feh"
         need xwd  "sudo pacman -S xorg-xwd"
+        start_xvfb
         SCREENSHOT="/tmp/kindle-screen.png"
         REFRESH_INTERVAL=1   # seconds between refreshes
 
@@ -253,6 +277,7 @@ case "$VIEWER" in
         ;;
 
     none)
+        start_xvfb
         echo "→ Running headlessly on $VDISPLAY (no viewer)."
         ;;
 

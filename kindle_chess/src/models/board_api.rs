@@ -7,7 +7,7 @@ use crate::models::{
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BOARD ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BoardAPI {
     pub token: TokenInfo,
     pub user: LichessUser, // =
@@ -289,7 +289,7 @@ pub struct Clock {
     increment: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(untagged)]
 #[serde(rename_all = "camelCase")]
 pub enum PlayedBy {
@@ -297,7 +297,7 @@ pub enum PlayedBy {
     Ai(PlayedByAi),
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct PlayedByPlayer {
     pub id: String,
     pub name: String,
@@ -305,7 +305,7 @@ pub struct PlayedByPlayer {
     pub rating: u64,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct PlayedByAi {
     #[serde(rename = "aiLevel")]
     pub ai_level: Option<u8>,

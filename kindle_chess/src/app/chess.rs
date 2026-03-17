@@ -4,49 +4,35 @@
  * as different ChessBackends
  */
 
-use crate::{
-    api::oauth::get_authenticated,
-    models::{
-        board_api::BoardAPI,
-        board_local::BoardLocal,
-        chess::{
-            ChessApp,
-            ChessBackend::{self},
-        },
+use crate::models::{
+    board_api::BoardAPI,
+    board_local::BoardLocal,
+    chess::{
+        ChessApp,
+        ChessBackend::{self},
     },
+    oauth::{LichessUser, TokenInfo},
 };
 
 impl ChessApp {
-    pub async fn new(online: bool) -> Result<ChessApp, Box<dyn std::error::Error>> {
-        // INIT backend
-        let backend: ChessBackend = match online {
-            true => {
-                // Authenticate
-                // TODO: Check if authenticated or not. Enable/Disable online play accordingly
-                // At this point, we should get recent games via API
-                // These are to be displayed on the Chess Game Homescreen, which should be shown now
-                // Then we should wait for user input, which could bring us to
-                // 1. Initialize a Game
-                // 1.a From ongoing games
-                // 1.b Creating a new one
-                // 2. Show Settings
-                // ....
-                // 3. Exit App
-                //
+    /// Constructs an online backend from an already-authenticated token.
+    /// Authentication must be completed before calling this.
+    pub async fn new_online(
+        token: TokenInfo,
+        user: LichessUser,
+    ) -> Result<ChessApp, Box<dyn std::error::Error>> {
+        let board_api = BoardAPI::new((token, user)).await?;
+        Ok(Self {
+            backend: ChessBackend::Online(board_api),
+        })
+    }
 
-                let auth = get_authenticated().await.unwrap();
-                let board_api = BoardAPI::new(auth).await?;
-                // board_api.stream_game_event().await.unwrap();
-                ChessBackend::Online(board_api)
-            }
-            false => {
-                // TODO: implement local game engine with id system and pass a proper game_id below
-                let board_local = BoardLocal::new(String::new()).await;
-                ChessBackend::Offline(board_local)
-            }
-        };
-
-        Ok(Self { backend })
+    /// Constructs an offline backend.
+    pub fn new_offline() -> ChessApp {
+        let board_local = BoardLocal::new(String::new());
+        Self {
+            backend: ChessBackend::Offline(board_local),
+        }
     }
 
     // Getter for the API

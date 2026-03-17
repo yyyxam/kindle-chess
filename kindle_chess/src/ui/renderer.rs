@@ -1,5 +1,5 @@
 use crate::ui::events::RectangleExt;
-use log::{info, warn};
+use log::info;
 use std::collections::HashMap;
 use std::sync::Arc as StdArc;
 use x11rb::COPY_DEPTH_FROM_PARENT;
@@ -28,13 +28,7 @@ impl Renderer {
     -> Result<(Self, StdArc<x11rb::rust_connection::RustConnection>), Box<dyn std::error::Error>>
     {
         // Connect to X11
-        let (conn, screen_num) = match x11rb::connect(Some(":0.0")) {
-            Ok(result) => result,
-            Err(_) => {
-                warn!("Failed to connect to :0.0, trying :0");
-                x11rb::connect(Some(":0"))?
-            }
-        };
+        let (conn, screen_num) = x11rb::connect(None)?;
 
         // Wrap connection in Arc for sharing
         let conn = StdArc::new(conn);
@@ -48,7 +42,6 @@ impl Renderer {
 
         let win_aux = CreateWindowAux::new()
             .background_pixel(screen.white_pixel)
-            .override_redirect(1)
             .event_mask(
                 EventMask::EXPOSURE
                     | EventMask::BUTTON_PRESS

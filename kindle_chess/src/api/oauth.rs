@@ -447,37 +447,55 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     Ok((token, user))
 }
 
-pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    /*! Loads auth-topken from disk */
-    let mut file = File::open(std::path::Path::new(env!("AUTH_TOKEN")))?;
+pub fn load_token() -> Result<Option<TokenInfo>, Box<dyn std::error::Error>> {
+    /*! Loads auth-token from disk */
+    let path = std::path::Path::new(env!("AUTH_TOKEN"));
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let mut file = File::open(path)?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
+    // Return None if file is empty -> lets to reauthentication
+    if buf.is_empty() {
+        return Ok(None);
+    }
+
     let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
-    let user = get_user_info(&token_info.access_token).await?;
-    info!(
-        "Successfully authenticated from token as: {}",
-        user.username
-    );
-    return Ok((token_info, user));
+
+    return Ok(Some(token_info));
 }
 
-pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    /*! Returns auth-token by either loading it from disc, or by reauthenticating */
-    match load_token().await {
-        Ok((token_info, user_info)) => {
-            info!("Authenticated via existing token.");
-            return Ok((token_info, user_info));
-        }
-        Err(_) => {
-            //authenticate
-            info!("No token found.. Starting authentication process");
-            let (token_info, user_info) = authenticate().await?;
-            info!("Authenticated via direct authentification.");
-            return Ok((token_info, user_info));
-            // TODO: What if this authentication process fails? (e.g. losing internet access in process)
-        }
-    }
-}
+// pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+//     /*! Returns auth-token by either loading it from disc, or by reauthenticating */
+//     match load_token() {
+//         Ok(Some(token_info)) => {
+//             let user_info = get_user_info(&token_info.access_token).await?;
+//             info!(
+//                 "Successfully authenticated from token as: {}",
+//                 user_info.username
+//             );
+//             info!("Authenticated via existing token.");
+//             return Ok((token_info, user_info));
+//         }
+//         Ok(None) => {
+//             //authenticate
+//             info!("No token found.. Starting authentication process");
+//             let (token_info, user_info) = authenticate().await?;
+//             // Push Authentication Screen
+
+//             info!("Authenticated via direct authentification.");
+
+//             return Ok((token_info, user_info));
+//         }
+//         Err(e) => {
+//             Ok(None)
+//             // TODO: What if this authentication process fails? (e.g. losing internet access in process)
+//         }
+//     }
+// }
 
 pub async fn authenticated_request(
     url: String,

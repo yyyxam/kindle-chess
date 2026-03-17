@@ -1,12 +1,15 @@
-2026-03-11T12:11:30.698957734+01:00 - Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.
-2026-03-11T12:11:30.699037136+01:00 - No token found.. Starting authentication process
-2026-03-11T12:11:30.699447052+01:00 - Starting OAuth2 authentication flow...
-2026-03-11T12:11:30.700880461+01:00 - Please visit the following URL to authenticate:
-2026-03-11T12:11:30.700883587+01:00 - https://lichess.org/oauth?response_type=code&client_id=lichess-rust-client-a27b461d-f558-4829-873c-4f93345dfcda&state=Vi9jGptmyd1eK3ijZqhRvg&code_challenge=YGgz_0J_5eg45h-6R6WPGGBYiEkJxY9IjCL4i0HTFAk&code_challenge_method=S256&redirect_uri=http%3A%2F%2F192.168.2.216%3A8080%2Fcallback&scope=challenge%3Aread+challenge%3Awrite+bot%3Aplay+board%3Aplay
-2026-03-11T12:11:30.735803717+01:00 - Printing generated QR-code with eips
-2026-03-11T14:36:34.198307804+01:00 - Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.
-2026-03-11T14:36:34.198385362+01:00 - No token found.. Starting authentication process
-2026-03-11T14:36:34.198766590+01:00 - Starting OAuth2 authentication flow...
-2026-03-11T14:36:34.198785877+01:00 - Please visit the following URL to authenticate:
-2026-03-11T14:36:34.198789504+01:00 - https://lichess.org/oauth?response_type=code&client_id=lichess-rust-client-43c9ff0f-236e-46ae-8c17-bcd6c365d525&state=pRITaHKqyND6yIv7EYyGNA&code_challenge=XrTFQEqOURKZQomkrBxKHROCHRgqASy1dBAs3JeeIAY&code_challenge_method=S256&redirect_uri=http%3A%2F%2F192.168.2.216%3A8080%2Fcallback&scope=challenge%3Aread+challenge%3Awrite+bot%3Aplay+board%3Aplay
-2026-03-11T14:36:34.231956271+01:00 - Printing generated QR-code with eips
+2026-03-17T20:13:14.046862811+01:00 - Triple-tap detected — emergency exit
+2026-03-17T20:13:14.046920631+01:00 - App shutting down
+2026-03-17T20:13:30.540239324+01:00 - Anwendung gestartet. Log-Nachrichten werden in 'app.log' geschrieben.
+2026-03-17T20:13:30.540472639+01:00 - Connected to X11, screen number: 0
+2026-03-17T20:13:30.540548745+01:00 - Starting Display isntance
+2026-03-17T20:13:30.540552792+01:00 - Starting App Instance
+2026-03-17T20:13:30.540555668+01:00 - Triple-tap anywhere to emergency exit
+2026-03-17T20:13:35.712660925+01:00 - Chess button pressed — launching chess
+2026-03-17T20:13:35.712723855+01:00 - Checking Authentication Status
+2026-03-17T20:13:35.713299804+01:00 - Starting OAuth2 authentication flow...
+2026-03-17T20:13:35.713367504+01:00 - Please visit the following URL to authenticate:
+2026-03-17T20:13:35.713371842+01:00 - https://lichess.org/oauth?response_type=code&client_id=lichess-rust-client-a3a93e62-0f5f-4c90-9554-91a9d2035991&state=Rxv7OUagNH38LUk9j3jUEQ&code_challenge=7Z3lqOe2sI2gCQxelrGzroeDMXcPuwmhMEdNpswgVqU&code_challenge_method=S256&redirect_uri=http%3A%2F%2F192.168.2.216%3A8080%2Fcallback&scope=challenge%3Aread+challenge%3Awrite+bot%3Aplay+board%3Aplay
+2026-03-17T20:13:35.755149822+01:00 - Printing generated QR-code with eips
+2026-03-17T20:16:08.113876597+01:00 - Triple-tap detected — emergency exit
+2026-03-17T20:16:08.113967321+01:00 - App shutting down

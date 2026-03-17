@@ -16,26 +16,15 @@ pub mod local;
 pub mod models;
 pub mod ui;
 
+use crate::models::app::App;
 use crate::models::chess::ChessApp;
+use crate::models::ui::Display;
 
 #[tokio::main]
 async fn main() {
     init_log();
-
-    // let mut board = BoardAPI::new(game_id, auth).await.unwrap();
-    // board.stream_game_event().await.unwrap();
-    //
-    // Run the app
-    match ChessApp::new(true).await {
-        Ok(app) => {
-            if let Err(e) = app.run() {
-                error!("Application error: {}", e);
-            }
-        }
-        Err(e) => {
-            error!("Failed to initialize ChessApp: {}", e);
-        }
-    }
+    let app = App::new();
+    app.unwrap().run();
 }
 
 fn init_log() -> Handle {
