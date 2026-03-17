@@ -1,3 +1,4 @@
+use image::{ImageBuffer, Luma};
 use std::time::Duration;
 use x11rb::protocol::xproto;
 
@@ -11,6 +12,7 @@ pub enum AppEvent {
     // Authentication Events
     AuthSuccess(TokenInfo, LichessUser),
     AuthFailed(String),
+    QrReady(ImageBuffer<Luma<u8>, Vec<u8>>),
 
     // UI Events
     Touch(TouchEvent),

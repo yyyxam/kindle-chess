@@ -36,6 +36,7 @@ impl ChessApp {
     }
 
     // Getter for the API
+    #[allow(dead_code)]
     fn board_api(&mut self) -> Option<&mut BoardAPI> {
         match &mut self.backend {
             ChessBackend::Offline(_) => None,

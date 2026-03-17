@@ -1,5 +1,4 @@
 use log::LevelFilter;
-use log::error;
 use log::info;
 use log4rs::Handle;
 use log4rs::append::file::FileAppender;
@@ -17,8 +16,6 @@ pub mod models;
 pub mod ui;
 
 use crate::models::app::App;
-use crate::models::chess::ChessApp;
-use crate::models::ui::Display;
 
 #[tokio::main]
 async fn main() {

@@ -1,4 +1,5 @@
 use crate::ui::events::RectangleExt;
+use image::{ImageBuffer, Luma, imageops};
 use log::info;
 use std::collections::HashMap;
 use std::sync::Arc as StdArc;
@@ -162,6 +163,52 @@ impl Renderer {
 
         self.conn
             .poly_segment(self.window, gc, &[Segment { x1, y1, x2, y2 }])?;
+
+        self.dirty = true;
+        Ok(())
+    }
+
+    pub fn draw_image(
+        &mut self,
+        x: i16,
+        y: i16,
+        width: u16,
+        height: u16,
+        img: &ImageBuffer<Luma<u8>, Vec<u8>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use image::imageops::FilterType;
+        use x11rb::protocol::xproto::ImageFormat;
+
+        // Scale to the target rect size
+        let scaled = imageops::resize(img, width as u32, height as u32, FilterType::Nearest);
+
+        // X11 put_image needs the scanline padded to a multiple of 4 bytes.
+        // For an 8-bpp grayscale image, width * 1 byte — pad each row to width_padded.
+        let width_padded = ((width as usize + 3) / 4) * 4;
+        let mut data: Vec<u8> = Vec::with_capacity(width_padded * height as usize);
+        for row in scaled.rows() {
+            for px in row {
+                data.push(px[0]);
+            }
+            // Pad to 4-byte boundary
+            for _ in (width as usize)..(width_padded) {
+                data.push(0);
+            }
+        }
+
+        let screen = &self.conn.setup().roots[self.screen_num];
+        self.conn.put_image(
+            ImageFormat::Z_PIXMAP,
+            self.window,
+            self.gcs[&DrawColor::Black],
+            width,
+            height,
+            x,
+            y,
+            0, // left_pad
+            screen.root_depth,
+            &data,
+        )?;
 
         self.dirty = true;
         Ok(())

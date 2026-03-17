@@ -2,10 +2,12 @@ use std::{
     error::Error,
     sync::{
         Arc,
-        mpsc::{self, Receiver, Sender},
+        mpsc::{Receiver, Sender},
     },
     time::Instant,
 };
+
+use image::{ImageBuffer, Luma};
 
 use crate::{
     models::chess::ChessApp,
@@ -100,6 +102,8 @@ impl ChessGameScreen {
 pub struct ChessAuthScreen {
     pub qr_code: Rectangle,
     pub auth_status: Rectangle,
+    pub qr_image: Option<ImageBuffer<Luma<u8>, Vec<u8>>>,
+    pub auth_url: Option<String>,
 }
 
 impl ChessAuthScreen {
@@ -107,6 +111,8 @@ impl ChessAuthScreen {
         Self {
             qr_code: Rectangle::new(286, 400, 500, 500),
             auth_status: Rectangle::new(286, 940, 500, 60),
+            qr_image: None,
+            auth_url: None,
         }
     }
 }

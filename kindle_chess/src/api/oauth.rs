@@ -22,19 +22,13 @@ use qrcode::{
     // render::{Pixel, Renderer},
 };
 use reqwest::ClientBuilder;
-use std::{sync::Arc, thread};
-use tokio::{
-    sync::{Mutex, oneshot},
-    time,
-};
+use std::sync::Arc;
+use tokio::sync::{Mutex, oneshot};
 use tower_http::cors::CorsLayer;
 use url::Url;
 
-use std::fs;
 use std::fs::{File, remove_file, write};
 use std::io::prelude::Read;
-
-use std::process::Command;
 
 impl OAuth2Client {
     pub fn new(config: AuthConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -353,9 +347,16 @@ pub fn generate_qr_code(
     let code = QrCode::new(url)?;
     let image = code.render::<Luma<u8>>().build();
 
-    image.save("/tmp/qrcode.png").unwrap();
-
     Ok(image)
+}
+
+pub async fn start_auth(
+    oauth_client: Arc<OAuth2Client>,
+) -> Result<(AuthState, ImageBuffer<Luma<u8>, Vec<u8>>), Box<dyn std::error::Error + Send + Sync>> {
+    let auth_state = oauth_client.start_auth_flow().await.unwrap();
+    info!("Auth URL: {}", auth_state.auth_url);
+    let qr = generate_qr_code(&auth_state.auth_url).unwrap();
+    Ok((auth_state, qr))
 }
 
 pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::error::Error>> {
@@ -380,68 +381,20 @@ pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::err
     let config = AuthConfig::default();
     let oauth_client = Arc::new(OAuth2Client::new(config)?);
 
-    // Start auth flow
-    let auth_state = oauth_client.start_auth_flow().await?;
+    let (_auth_state, _qr) = start_auth(oauth_client.clone())
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    info!("Starting OAuth2 authentication flow...");
-    info!("Please visit the following URL to authenticate:");
-    info!("{}", auth_state.auth_url);
-
-    // Generate QR code for mobile authentication
-    match generate_qr_code(&auth_state.auth_url) {
-        Ok(_qr) => {
-            // info!("Or scan this QR code with your mobile device:");
-            // info!("\n{}", qr);
-            info!("Printing generated QR-code with eips");
-
-            let mut eips_cmd = Command::new("eips");
-            eips_cmd
-                .arg("-c")
-                .output()
-                .expect("Failed to clear display");
-
-            eips_cmd
-                .args([
-                    "10",
-                    "30",
-                    "Scan this QR-Code to login to lichess on phone: ",
-                ])
-                .output()
-                .expect("Couldn't render png qr via eips");
-
-            eips_cmd
-                .args(["-g", "/tmp/qrcode.png"])
-                .args(["x", "268"])
-                .args(["y", "268"])
-                .output()
-                .expect("Couldn't render png qr via eips");
-
-            fs::remove_file("/tmp/qrcode.png").unwrap();
-        }
-        Err(e) => {
-            info!("Could not generate/print QR code: {}", e);
-        }
-    }
-
-    // Start callback server and wait for auth
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<TokenInfo>();
     let token = run_auth_server(oauth_client.clone(), shutdown_rx).await?;
-
-    // Notify shutdown
     let _ = shutdown_tx.send(token.clone());
 
-    // Get user info
     let user = get_user_info(&token.access_token).await?;
     info!("Successfully re-authenticated as: {}", user.username);
 
-    // Write TokenInfo to token.json-File
     match write(env!("AUTH_TOKEN"), serde_json::to_string_pretty(&token)?) {
-        Ok(()) => {
-            info!("Auth-Token written to  {}", env!("AUTH_TOKEN"))
-        }
-        Err(e) => {
-            info!("Error writing AuthToken: {}", e)
-        }
+        Ok(()) => info!("Auth-Token written to {}", env!("AUTH_TOKEN")),
+        Err(e) => info!("Error writing AuthToken: {}", e),
     }
 
     Ok((token, user))

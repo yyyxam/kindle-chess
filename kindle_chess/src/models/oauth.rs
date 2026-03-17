@@ -26,7 +26,7 @@ mod arc_mutable_option {
     use crate::models::oauth::AuthState;
 
     pub fn serialize<S>(
-        state: &Arc<Mutex<Option<AuthState>>>,
+        _state: &Arc<Mutex<Option<AuthState>>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
