@@ -66,7 +66,11 @@ impl Screen for HomeScreen {
                                         }
                                         Err(_) => {
                                             // Stale token, reauthenticate
-                                            match authenticate().await.map_err(|e| e.to_string()) {
+                                            // Send EventSender so QrReady-Event can be sent
+                                            match authenticate(tx.clone())
+                                                .await
+                                                .map_err(|e| e.to_string())
+                                            {
                                                 Ok((token_info, user_info)) => {
                                                     let _ = tx.send(AppEvent::AuthSuccess(
                                                         token_info, user_info,
@@ -82,7 +86,9 @@ impl Screen for HomeScreen {
                                 // (Re-)Authentication needed
                                 Ok(None) => {
                                     // Stale token, reauthenticate
-                                    match authenticate().await.map_err(|e| e.to_string()) {
+                                    // Send EventSender so QrReady-Event can be sent
+                                    match authenticate(tx.clone()).await.map_err(|e| e.to_string())
+                                    {
                                         Ok((token_info, user_info)) => {
                                             info!(
                                                 "Successfully re-authenticated as: {}",
@@ -212,11 +218,21 @@ impl Screen for ChessAuthScreen {
         display
             .renderer
             .clear(crate::ui::renderer::DrawColor::White)?;
-        display.renderer.draw_rectangle(
-            self.qr_code,
-            crate::ui::renderer::DrawColor::LightGray,
-            true,
-        )?;
+        if let Some(ref img) = self.qr_image {
+            display.renderer.draw_image(
+                self.qr_code.x,
+                self.qr_code.y,
+                self.qr_code.width,
+                self.qr_code.height,
+                img,
+            )?;
+        } else {
+            display.renderer.draw_rectangle(
+                self.qr_code,
+                crate::ui::renderer::DrawColor::LightGray,
+                true,
+            )?;
+        }
         display.renderer.draw_rectangle(
             self.auth_status,
             crate::ui::renderer::DrawColor::LightGray,
@@ -250,7 +266,10 @@ impl Screen for ChessAuthScreen {
             }
 
             AppEvent::ChessReady(app) => Ok(Transition::Push(Box::new(ChessGameScreen::new(app)))),
-
+            AppEvent::QrReady(img) => {
+                self.qr_image = Some(img);
+                Ok(Transition::Redraw)
+            }
             _ => Ok(Transition::Stay),
         }
     }

@@ -179,24 +179,48 @@ impl Renderer {
         use image::imageops::FilterType;
         use x11rb::protocol::xproto::ImageFormat;
 
-        // Scale to the target rect size
         let scaled = imageops::resize(img, width as u32, height as u32, FilterType::Nearest);
 
-        // X11 put_image needs the scanline padded to a multiple of 4 bytes.
-        // For an 8-bpp grayscale image, width * 1 byte — pad each row to width_padded.
-        let width_padded = ((width as usize + 3) / 4) * 4;
+        let screen = &self.conn.setup().roots[self.screen_num];
+        let depth = screen.root_depth;
+
+        // Each pixel must match the drawable depth:
+        //   8-bit  → 1 byte per pixel
+        //   16-bit → 2 bytes per pixel
+        //   24/32  → 4 bytes per pixel (BGRX, scanlines still padded to 4 bytes)
+        let bytes_per_pixel: usize = match depth {
+            8 => 1,
+            16 => 2,
+            _ => 4, // 24 or 32-bit — the common dev-machine case
+        };
+
+        let row_bytes = width as usize * bytes_per_pixel;
+        let width_padded = ((row_bytes + 3) / 4) * 4;
         let mut data: Vec<u8> = Vec::with_capacity(width_padded * height as usize);
+
         for row in scaled.rows() {
+            let mut row_data: Vec<u8> = Vec::with_capacity(row_bytes);
             for px in row {
-                data.push(px[0]);
+                let v = px[0];
+                match bytes_per_pixel {
+                    1 => row_data.push(v),
+                    2 => {
+                        row_data.push(v);
+                        row_data.push(v);
+                    }
+                    _ => {
+                        row_data.push(v);
+                        row_data.push(v);
+                        row_data.push(v);
+                        row_data.push(0);
+                    }
+                }
             }
-            // Pad to 4-byte boundary
-            for _ in (width as usize)..(width_padded) {
-                data.push(0);
-            }
+            // Pad scanline to 4-byte boundary
+            row_data.resize(width_padded, 0);
+            data.extend_from_slice(&row_data);
         }
 
-        let screen = &self.conn.setup().roots[self.screen_num];
         self.conn.put_image(
             ImageFormat::Z_PIXMAP,
             self.window,
@@ -205,8 +229,8 @@ impl Renderer {
             height,
             x,
             y,
-            0, // left_pad
-            screen.root_depth,
+            0,     // left_pad
+            depth, // use actual drawable depth, not hardcoded 8
             &data,
         )?;
 

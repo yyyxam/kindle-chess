@@ -1,5 +1,8 @@
-use crate::models::oauth::{
-    AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
+use crate::{
+    models::oauth::{
+        AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
+    },
+    ui::events::AppEvent,
 };
 use axum::{
     Router,
@@ -376,21 +379,25 @@ pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::erro
     Ok(user)
 }
 
-pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+pub async fn authenticate(
+    tx: std::sync::mpsc::Sender<crate::ui::events::AppEvent>,
+) -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
     /*! Starts authentication flow */
     let config = AuthConfig::default();
     let oauth_client = Arc::new(OAuth2Client::new(config)?);
 
-    let (_auth_state, _qr) = start_auth(oauth_client.clone())
+    let (_auth_state, qr) = start_auth(oauth_client.clone())
         .await
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+
+    let _ = tx.send(AppEvent::QrReady(qr));
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<TokenInfo>();
     let token = run_auth_server(oauth_client.clone(), shutdown_rx).await?;
     let _ = shutdown_tx.send(token.clone());
 
     let user = get_user_info(&token.access_token).await?;
-    info!("Successfully re-authenticated as: {}", user.username);
+    info!("Successfully (re-)authenticated as: {}", user.username);
 
     match write(env!("AUTH_TOKEN"), serde_json::to_string_pretty(&token)?) {
         Ok(()) => info!("Auth-Token written to {}", env!("AUTH_TOKEN")),
