@@ -37,11 +37,6 @@ impl Screen for HomeScreen {
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
             AppEvent::Touch(touch) => {
-                if display.check_triple_tap(&touch) {
-                    info!("Triple-tap detected - emergency exit!");
-                    return Ok(Transition::Quit);
-                }
-
                 if touch.kind == TouchKind::Up {
                     if self.chess_button.contains(touch.x, touch.y) {
                         info!("Chess button pressed — launching chess");
@@ -153,11 +148,6 @@ impl Screen for ChessGameScreen {
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
             AppEvent::Touch(touch) => {
-                if display.check_triple_tap(&touch) {
-                    info!("Triple-tap detected - emergency exit!");
-                    return Ok(Transition::Quit);
-                }
-
                 if let Some(ev) = self.board.handle_touch(&touch) {
                     return self.handle_event(ev, display);
                 }
@@ -242,13 +232,7 @@ impl Screen for ChessAuthScreen {
         display: &mut Display,
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
-            AppEvent::Touch(touch) => {
-                if display.check_triple_tap(&touch) {
-                    info!("Triple-tap detected - emergency exit!");
-                    return Ok(Transition::Quit);
-                }
-                Ok(Transition::Stay)
-            }
+            AppEvent::Touch(touch) => Ok(Transition::Stay),
 
             AppEvent::AuthSuccess(token, user) => {
                 let tx = display.event_tx.clone();

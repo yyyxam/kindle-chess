@@ -27,7 +27,7 @@ impl ChessApp {
         })
     }
 
-    /// Constructs an offline backend.
+    /// Constructs an offline backend (not implemented).
     pub fn new_offline() -> ChessApp {
         let board_local = BoardLocal::new(String::new());
         Self {
