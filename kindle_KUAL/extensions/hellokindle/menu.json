@@ -5,23 +5,23 @@
       "priority": 0,
       "items": [
         {
-          "name": "Eips-Test",
+          "name": "ChessApp",
           "priority": 1,
-          "action": "/mnt/us/hellokindle/eips_test.sh",
-          "params": "--kual",
-          "exitmenu": false
-        },
-        {
-          "name": "OAuth Test Script",
-          "priority": 2,
-          "action": "/mnt/us/hellokindle/app_test.sh",
+          "action": "/mnt/us/hellokindle/chess_app.sh",
           "params": "--kual",
           "exitmenu": false
         },
         {
           "name": "Display Test Script",
+          "priority": 2,
+          "action": "/mnt/us/hellokindle/x11test.sh",
+          "params": "--kual",
+          "exitmenu": false
+        },
+        {
+          "name": "Display old Test Script",
           "priority": 3,
-          "action": "/mnt/us/hellokindle/display_test.sh",
+          "action": "/mnt/us/hellokindle/oldx11test.sh",
           "params": "--kual",
           "exitmenu": false
         }
