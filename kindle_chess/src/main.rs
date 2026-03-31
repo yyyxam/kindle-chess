@@ -1,3 +1,5 @@
+use log::error;
+
 use log::LevelFilter;
 use log::info;
 use log4rs::Handle;
@@ -20,7 +22,20 @@ use crate::models::app::App;
 #[tokio::main]
 async fn main() {
     init_log();
+
+    match App::new() {
+        Ok(app) => {
+            // if let Err(e) =
+            app.run() //{
+            // error!("Application error: {}", e);
+        }
+        Err(e) => {
+            error!("Failed to initialize App: {}", e);
+        }
+    }
+
     let app = App::new();
+    info!("App instance started");
     app.unwrap().run();
 }
 
