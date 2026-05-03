@@ -1,8 +1,10 @@
 use image::{ImageBuffer, Luma};
+use std::sync::Arc;
 use std::time::Duration;
 use x11rb::protocol::xproto;
 
 use crate::models::{
+    board_api::GameDataList,
     chess::ChessApp,
     oauth::{LichessUser, TokenInfo},
 };
@@ -13,6 +15,10 @@ pub enum AppEvent {
     AuthSuccess(TokenInfo, LichessUser),
     AuthFailed(String),
     QrReady(ImageBuffer<Luma<u8>, Vec<u8>>),
+
+    // Ongoing-games fetch
+    OngoingGamesLoaded(Arc<GameDataList>),
+    OngoingGamesFailed(String),
 
     // UI Events
     Touch(TouchEvent),

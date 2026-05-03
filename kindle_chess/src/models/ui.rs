@@ -10,7 +10,7 @@ use std::{
 use image::{ImageBuffer, Luma};
 
 use crate::{
-    models::chess::ChessApp,
+    models::{board_api::GameDataList, chess::ChessApp},
     ui::{
         events::{AppEvent, Rectangle, RectangleExt},
         renderer::Renderer,
@@ -94,6 +94,75 @@ impl ChessGameScreen {
             app: app,
             board: BoardWidget::new(Rectangle::new(0, 0, 1072, 1072)),
             sidebar: SidebarWidget::new(Rectangle::new(0, 1072, 1072, 376)),
+        }
+    }
+}
+
+// ─── ChessGameScreen ──────────────────────────────────────────────────────────
+
+pub struct OngoingChessGamesScreen {
+    pub app: ChessApp,
+    pub prev_page_button: Rectangle,
+    pub next_page_button: Rectangle,
+    pub chessgame_button_0: Rectangle,
+    pub chessgame_button_1: Rectangle,
+    pub chessgame_button_2: Rectangle,
+    pub chessgame_button_3: Rectangle,
+    pub back_button: Rectangle,
+
+    // Async fetch state. `games == None && error == None && !loading` means the
+    // screen has not yet kicked off its initial fetch — `render` will trigger it.
+    pub games: Option<Arc<GameDataList>>,
+    pub error: Option<String>,
+    pub loading: bool,
+}
+
+impl OngoingChessGamesScreen {
+    pub fn new(app: ChessApp) -> Self {
+        // Layout: 1072 × 1448 total canvas
+        // Place the chess button centred in the upper half.
+        const BTN_W: u16 = 800;
+        const BTN_H: u16 = 120;
+        const CENTER_X: i16 = (1072 - BTN_W as i16) / 2; // 336
+        const CENTER_Y: i16 = (1448 / 5 - BTN_H as i16) / 2; // 304
+        Self {
+            app: app,
+            prev_page_button: Rectangle::new(CENTER_X / 2, CENTER_Y, BTN_W / 2, BTN_H - 20),
+            next_page_button: Rectangle::new(CENTER_X / 2, CENTER_Y, BTN_W / 2, BTN_H - 20),
+            chessgame_button_0: Rectangle::new(
+                CENTER_X / 2,
+                BTN_H.cast_signed() + CENTER_Y,
+                BTN_W / 2,
+                BTN_H,
+            ),
+            chessgame_button_1: Rectangle::new(
+                CENTER_X + CENTER_X / 2,
+                BTN_H.cast_signed() + CENTER_Y,
+                BTN_W / 2,
+                BTN_H,
+            ),
+            chessgame_button_2: Rectangle::new(
+                CENTER_X / 2,
+                2 * BTN_H.cast_signed() + CENTER_Y,
+                BTN_W / 2,
+                BTN_H,
+            ),
+            chessgame_button_3: Rectangle::new(
+                CENTER_X + CENTER_X / 2,
+                2 * BTN_H.cast_signed() + CENTER_Y,
+                BTN_W / 2,
+                BTN_H,
+            ),
+            back_button: Rectangle::new(
+                CENTER_X,
+                3 * BTN_H.cast_signed() + CENTER_Y,
+                BTN_W,
+                BTN_H - 20,
+            ),
+
+            games: None,
+            error: None,
+            loading: false,
         }
     }
 }

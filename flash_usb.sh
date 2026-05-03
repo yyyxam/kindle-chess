@@ -5,8 +5,8 @@ cd kindle_chess
 echo "Building Binaries"
 RUSTFLAGS="-C target-feature=+crt-static" cross build --target armv7-unknown-linux-musleabi --release
 
-echo "Copying Binaries to Kindle"
-yes | cp -r ./target/armv7-unknown-linux-musleabi/release/kindle-hello /run/media/mxy/Kindle/hellokindle/bin/
+echo "Copying Binaries to local KUAL-App"
+yes | cp -r ./target/armv7-unknown-linux-musleabi/release/kindle-hello ../kindle_KUAL/hellokindle/bin/
 
 cd ..
 

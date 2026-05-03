@@ -44,6 +44,15 @@ impl ChessApp {
         }
     }
 
+    /// Returns a cloned `BoardAPI` for use inside async tasks (BoardAPI is `Clone`,
+    /// holds only the auth token + user). Returns `None` for offline backends.
+    pub fn online_api(&self) -> Option<BoardAPI> {
+        match &self.backend {
+            ChessBackend::Online(api) => Some(api.clone()),
+            ChessBackend::Offline(_) => None,
+        }
+    }
+
     // pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
     //     /* Starts the ChessGameScreen (TODO) and loads/starts a game into the backend (TODO).
     //      * For now, crudely checks if it's an online game and if so, passes game_id of most recent game to stream it

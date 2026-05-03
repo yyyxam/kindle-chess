@@ -1,10 +1,15 @@
+use std::sync::Arc;
+
 use log::{debug, info, warn};
 
 use crate::{
     api::oauth::{authenticate, get_user_info, load_token},
     models::{
         chess::ChessApp,
-        ui::{ChessAuthScreen, ChessGameScreen, Display, HomeScreen, Screen, Transition},
+        ui::{
+            ChessAuthScreen, ChessGameScreen, Display, HomeScreen, OngoingChessGamesScreen, Screen,
+            Transition,
+        },
     },
     ui::events::{AppEvent, RectangleExt, TouchKind},
 };
@@ -22,7 +27,7 @@ impl Screen for HomeScreen {
             .renderer
             .draw_rectangle(self.chess_button, DrawColor::Black, false)?;
 
-        let label = "Chess";
+        let label = "CHESS";
         let size_px = 64.0;
         let (tw, th) = display.renderer.measure_text(label, size_px);
         let tx = self.chess_button.x + (self.chess_button.width as i16 - tw as i16) / 2;
@@ -275,6 +280,135 @@ impl Screen for ChessAuthScreen {
                 self.qr_image = Some(img);
                 Ok(Transition::Redraw)
             }
+            _ => Ok(Transition::Stay),
+        }
+    }
+}
+
+// ─── OngoingChessGamesScreen ──────────────────────────────────────────────────────────
+
+impl OngoingChessGamesScreen {
+    /// Spawn the ongoing-games fetch onto the tokio runtime. Idempotent w.r.t.
+    /// `self.loading` — call freely from `render` (initial load) or a future
+    /// reload-button handler. Result is delivered as `OngoingGamesLoaded` /
+    /// `OngoingGamesFailed` over the shared event channel.
+    fn kick_fetch(&mut self, display: &Display) {
+        if self.loading {
+            return;
+        }
+        let Some(api) = self.app.online_api() else {
+            self.error = Some("Offline backend has no ongoing games".into());
+            return;
+        };
+        self.loading = true;
+        let tx = display.event_tx.clone();
+        tokio::spawn(async move {
+            match api.get_ongoing_games(8).await {
+                Ok(list) => {
+                    let _ = tx.send(AppEvent::OngoingGamesLoaded(Arc::new(list)));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::OngoingGamesFailed(e.to_string()));
+                }
+            }
+        });
+    }
+}
+
+impl Screen for OngoingChessGamesScreen {
+    fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::ui::renderer::DrawColor;
+
+        // First paint after Push: kick off the async fetch. Subsequent renders
+        // (after data arrives or on reload) skip this branch.
+        if self.games.is_none() && self.error.is_none() && !self.loading {
+            self.kick_fetch(display);
+        }
+
+        display.renderer.clear(DrawColor::White)?;
+
+        let size_px = 64.0;
+
+        if let Some(err) = &self.error {
+            let label = format!("Error: {}", err);
+            let (tw, th) = display.renderer.measure_text(&label, size_px);
+            let tx = (1072 - tw as i16) / 2;
+            let ty = (1448 - th as i16) / 2;
+            display
+                .renderer
+                .draw_text(tx, ty, &label, size_px, DrawColor::Black)?;
+        } else if let Some(games) = &self.games {
+            let buttons = [
+                self.chessgame_button_0,
+                self.chessgame_button_1,
+                self.chessgame_button_2,
+                self.chessgame_button_3,
+            ];
+            for (i, btn) in buttons.iter().enumerate() {
+                display.renderer.draw_rectangle(*btn, DrawColor::White, true)?;
+                display.renderer.draw_rectangle(*btn, DrawColor::Black, false)?;
+
+                let label = match games.now_playing.get(i) {
+                    Some(g) => format!("{}  vs  opp", g.game_id),
+                    None => "—".to_string(),
+                };
+                let (tw, th) = display.renderer.measure_text(&label, size_px);
+                let tx = btn.x + (btn.width as i16 - tw as i16) / 2;
+                let ty = btn.y + (btn.height as i16 - th as i16) / 2;
+                display
+                    .renderer
+                    .draw_text(tx, ty, &label, size_px, DrawColor::Black)?;
+            }
+        } else {
+            let label = "Loading…";
+            let (tw, th) = display.renderer.measure_text(label, size_px);
+            let tx = (1072 - tw as i16) / 2;
+            let ty = (1448 - th as i16) / 2;
+            display
+                .renderer
+                .draw_text(tx, ty, label, size_px, DrawColor::Black)?;
+        }
+
+        display.renderer.present()?;
+        Ok(())
+    }
+
+    fn handle_event(
+        &mut self,
+        event: AppEvent,
+        _display: &mut Display,
+    ) -> Result<Transition, Box<dyn std::error::Error>> {
+        match event {
+            AppEvent::OngoingGamesLoaded(list) => {
+                info!("Ongoing games loaded: {} entries", list.now_playing.len());
+                self.games = Some(list);
+                self.loading = false;
+                Ok(Transition::Redraw)
+            }
+
+            AppEvent::OngoingGamesFailed(e) => {
+                warn!("Ongoing games fetch failed: {}", e);
+                self.error = Some(e);
+                self.loading = false;
+                Ok(Transition::Redraw)
+            }
+
+            AppEvent::Touch(touch) => {
+                if touch.kind == TouchKind::Up && self.back_button.contains(touch.x, touch.y) {
+                    return Ok(Transition::Pop);
+                }
+                Ok(Transition::Stay)
+            }
+
+            AppEvent::Expose => Ok(Transition::Redraw),
+
+            AppEvent::WindowUnmapped => {
+                warn!("Window unmapped!");
+                Ok(Transition::Stay)
+            }
+
+            AppEvent::Quit => Ok(Transition::Quit),
+
             _ => Ok(Transition::Stay),
         }
     }
