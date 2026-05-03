@@ -428,35 +428,6 @@ pub fn load_token() -> Result<Option<TokenInfo>, Box<dyn std::error::Error>> {
     return Ok(Some(token_info));
 }
 
-// pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-//     /*! Returns auth-token by either loading it from disc, or by reauthenticating */
-//     match load_token() {
-//         Ok(Some(token_info)) => {
-//             let user_info = get_user_info(&token_info.access_token).await?;
-//             info!(
-//                 "Successfully authenticated from token as: {}",
-//                 user_info.username
-//             );
-//             info!("Authenticated via existing token.");
-//             return Ok((token_info, user_info));
-//         }
-//         Ok(None) => {
-//             //authenticate
-//             info!("No token found.. Starting authentication process");
-//             let (token_info, user_info) = authenticate().await?;
-//             // Push Authentication Screen
-
-//             info!("Authenticated via direct authentification.");
-
-//             return Ok((token_info, user_info));
-//         }
-//         Err(e) => {
-//             Ok(None)
-//             // TODO: What if this authentication process fails? (e.g. losing internet access in process)
-//         }
-//     }
-// }
-
 pub async fn authenticated_request(
     url: String,
     token: &TokenInfo,

@@ -1,4 +1,5 @@
 use crate::ui::events::RectangleExt;
+use fontdue::{Font, FontSettings};
 use image::{ImageBuffer, Luma, imageops};
 use log::info;
 use std::collections::HashMap;
@@ -7,11 +8,14 @@ use x11rb::COPY_DEPTH_FROM_PARENT;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{self, *};
 
+const FONT_BYTES: &[u8] = include_bytes!("../../assets/AdwaitaSans-Regular.ttf");
+
 pub struct Renderer {
     conn: StdArc<x11rb::rust_connection::RustConnection>,
     screen_num: usize,
     window: Window,
     gcs: HashMap<DrawColor, Gcontext>,
+    font: Font,
     dirty: bool,
 }
 
@@ -43,6 +47,7 @@ impl Renderer {
 
         let win_aux = CreateWindowAux::new()
             .background_pixel(screen.white_pixel)
+            .override_redirect(1)
             .event_mask(
                 EventMask::EXPOSURE
                     | EventMask::BUTTON_PRESS
@@ -94,11 +99,15 @@ impl Renderer {
         )?;
         conn.flush()?;
 
+        let font = Font::from_bytes(FONT_BYTES, FontSettings::default())
+            .map_err(|e| format!("failed to parse embedded font: {}", e))?;
+
         let renderer = Self {
             conn: conn.clone(), // Clone the Arc
             screen_num,
             window,
             gcs,
+            font,
             dirty: true,
         };
 
@@ -238,6 +247,88 @@ impl Renderer {
         Ok(())
     }
 
+    /// Returns the bounding-box size of `text` rendered at `size_px`, matching
+    /// what `draw_text` would produce. Width is the sum of glyph advances,
+    /// height is `ascent + descent` (so descender room is reserved even when
+    /// the string has none — slight optical mis-centring is the trade-off).
+    pub fn measure_text(&self, text: &str, size_px: f32) -> (u32, u32) {
+        match self.line_geometry(text, size_px) {
+            Some((w, ascent, descent)) => (w, (ascent + descent).max(1) as u32),
+            None => (0, 0),
+        }
+    }
+
+    fn line_geometry(&self, text: &str, size_px: f32) -> Option<(u32, i32, i32)> {
+        if text.is_empty() {
+            return None;
+        }
+        let line = self.font.horizontal_line_metrics(size_px)?;
+        let ascent = line.ascent.ceil() as i32;
+        let descent = (-line.descent).ceil() as i32; // fontdue's descent is negative
+        let advance: f32 = text
+            .chars()
+            .map(|c| self.font.metrics(c, size_px).advance_width)
+            .sum();
+        Some((advance.ceil() as u32, ascent, descent))
+    }
+
+    /// Draws `text` with its top-left at (x, y) on a white background.
+    /// `size_px` is the cap height in pixels (Adwaita Sans cap ≈ 0.7 × size).
+    /// Glyph coverage is alpha-blended onto a transient grayscale buffer
+    /// (initialised to white) which is then put_image'd via `draw_image`.
+    pub fn draw_text(
+        &mut self,
+        x: i16,
+        y: i16,
+        text: &str,
+        size_px: f32,
+        color: DrawColor,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let Some((buf_width, ascent, descent)) = self.line_geometry(text, size_px) else {
+            return Ok(());
+        };
+        let buf_height = (ascent + descent).max(1) as u32;
+        if buf_width == 0 {
+            return Ok(());
+        }
+
+        let fg = color_to_luma(color) as i32;
+        let mut buffer: ImageBuffer<Luma<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(buf_width, buf_height, Luma([255]));
+
+        let mut pen_x: f32 = 0.0;
+        for c in text.chars() {
+            let (m, bitmap) = self.font.rasterize(c, size_px);
+            if m.width > 0 && m.height > 0 {
+                let glyph_left = (pen_x + m.xmin as f32).round() as i32;
+                let glyph_top = ascent - m.height as i32 - m.ymin;
+                for row in 0..m.height {
+                    for col in 0..m.width {
+                        let cov = bitmap[row * m.width + col] as i32;
+                        if cov == 0 {
+                            continue;
+                        }
+                        let dx = glyph_left + col as i32;
+                        let dy = glyph_top + row as i32;
+                        if dx < 0 || dy < 0 || dx >= buf_width as i32 || dy >= buf_height as i32 {
+                            continue;
+                        }
+                        let bg = buffer.get_pixel(dx as u32, dy as u32)[0] as i32;
+                        let blended = bg + cov * (fg - bg) / 255;
+                        buffer.put_pixel(
+                            dx as u32,
+                            dy as u32,
+                            Luma([blended.clamp(0, 255) as u8]),
+                        );
+                    }
+                }
+            }
+            pen_x += m.advance_width;
+        }
+
+        self.draw_image(x, y, buf_width as u16, buf_height as u16, &buffer)
+    }
+
     pub fn clear(&mut self, color: DrawColor) -> Result<(), Box<dyn std::error::Error>> {
         self.draw_rectangle(Rectangle::new(0, 0, 1072, 1448), color, true)
     }
@@ -259,5 +350,15 @@ impl Drop for Renderer {
     fn drop(&mut self) {
         let _ = self.conn.destroy_window(self.window);
         let _ = self.conn.flush();
+    }
+}
+
+fn color_to_luma(c: DrawColor) -> u8 {
+    match c {
+        DrawColor::Black => 0,
+        DrawColor::DarkGray => 64,
+        DrawColor::Gray => 128,
+        DrawColor::LightGray => 192,
+        DrawColor::White => 255,
     }
 }

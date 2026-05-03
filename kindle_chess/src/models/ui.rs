@@ -62,6 +62,7 @@ pub enum Transition {
 pub struct HomeScreen {
     pub chess_button: Rectangle,
     // pub game_of_ur_button: Rectangle,
+    // pub settings_button: Rectangle,
 }
 
 impl HomeScreen {

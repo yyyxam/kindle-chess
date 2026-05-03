@@ -22,7 +22,7 @@ echo "Time: $(date)"               >> "$SCRIPT_LOG"
 if [ ! -f "$BINARY" ]; then
     echo "ERROR: Binary not found at $BINARY" >> "$SCRIPT_LOG"
     eips -c
-    eips "ERROR: x11test binary not found"
+    eips "ERROR: chess-app binary \"kindle-hello\" not found"
     sleep 5
     exit 1
 fi
@@ -53,8 +53,13 @@ eips "Starting test app..."
 sleep 3
 eips -c
 
+# Hand the framebuffer over to X11 so the app's window is actually visible
+# (otherwise pillow keeps compositing the Kindle UI on top of X11).
+export DISPLAY=:0
+lipc-set-prop com.lab126.pillow disableEnablePillow disable 2>/dev/null || true
+
 # WICHTIG: Timeout - falls das Programm hängt, automatisch beenden nach 3min
-timeout 180 $BINARY_PATH >> "$SCRIPT_LOG" 2>&1
+timeout 180 $BINARY >> "$SCRIPT_LOG" 2>&1
 
 EXIT_CODE=$?
 
@@ -64,8 +69,7 @@ echo "Test ended with code: $EXIT_CODE" >> "$SCRIPT_LOG"
 if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 124 ]; then
     echo "ERROR in running test app!" >> "$SCRIPT_LOG"
     eips -c
-    eips "An error occured, running the test app"
-    eips "Check logs: /mnt/us/hellokindle/log/script.log and app.log"
+    eips "Error! Check logs: /mnt/us/hellokindle/log/app.log and launch.log"
     sleep 3
 elif [ $EXIT_CODE -eq 124 ]; then
     echo "Timeout - App has been shutdown automatically" >> "$SCRIPT_LOG"
@@ -76,11 +80,14 @@ else
     echo "Test completed successfully!" >> "$SCRIPT_LOG"
 fi
 
+# Hand display back to the Kindle UI
+lipc-set-prop com.lab126.pillow disableEnablePillow enable 2>/dev/null || true
+
 # Sicherstellung: Display ist sauber
 eips -c
 eips -f
 
-echo "=== End of binary test script ===" >> "$SCRIPT_LOG"
+echo "=== End of  test script ===" >> "$SCRIPT_LOG"
 
 
 

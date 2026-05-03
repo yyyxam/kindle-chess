@@ -13,19 +13,24 @@ use crate::{
 
 impl Screen for HomeScreen {
     fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::ui::renderer::DrawColor;
+        display.renderer.clear(DrawColor::White)?;
         display
             .renderer
-            .clear(crate::ui::renderer::DrawColor::White)?;
-        display.renderer.draw_rectangle(
-            self.chess_button,
-            crate::ui::renderer::DrawColor::LightGray,
-            true,
-        )?;
-        display.renderer.draw_rectangle(
-            self.chess_button,
-            crate::ui::renderer::DrawColor::Black,
-            false,
-        )?;
+            .draw_rectangle(self.chess_button, DrawColor::White, true)?;
+        display
+            .renderer
+            .draw_rectangle(self.chess_button, DrawColor::Black, false)?;
+
+        let label = "Chess";
+        let size_px = 64.0;
+        let (tw, th) = display.renderer.measure_text(label, size_px);
+        let tx = self.chess_button.x + (self.chess_button.width as i16 - tw as i16) / 2;
+        let ty = self.chess_button.y + (self.chess_button.height as i16 - th as i16) / 2;
+        display
+            .renderer
+            .draw_text(tx, ty, label, size_px, DrawColor::Black)?;
+
         display.renderer.present()?;
         Ok(())
     }
