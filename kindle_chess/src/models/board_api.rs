@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::models::{
     game::Player,
@@ -289,9 +289,7 @@ pub struct Clock {
     increment: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(untagged)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Serialize, Clone)]
 pub enum PlayedBy {
     User(PlayedByPlayer),
     Ai(PlayedByAi),
@@ -309,6 +307,44 @@ pub struct PlayedByPlayer {
 pub struct PlayedByAi {
     #[serde(rename = "aiLevel")]
     pub ai_level: Option<u8>,
+}
+
+// Lichess sends two different opponent shapes:
+//   GET /api/account/playing  → {id, username, rating, ai}     (ai = level or null)
+//   game-state stream         → {id, name, title, rating}      or {aiLevel}
+// Untagged + try-User-first failed for now_playing because `name` was missing,
+// so every opponent fell through to the all-Optional Ai variant. This proxy
+// accepts both schemas and discriminates on whether an ai-level field is set.
+#[derive(Deserialize)]
+struct PlayedByRaw {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default, alias = "username")]
+    name: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    rating: Option<u64>,
+    #[serde(default, rename = "aiLevel", alias = "ai")]
+    ai_level: Option<u8>,
+}
+
+impl<'de> Deserialize<'de> for PlayedBy {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = PlayedByRaw::deserialize(d)?;
+        if let Some(level) = raw.ai_level {
+            Ok(PlayedBy::Ai(PlayedByAi {
+                ai_level: Some(level),
+            }))
+        } else {
+            Ok(PlayedBy::User(PlayedByPlayer {
+                id: raw.id.unwrap_or_default(),
+                name: raw.name.unwrap_or_default(),
+                title: raw.title,
+                rating: raw.rating.unwrap_or(0),
+            }))
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

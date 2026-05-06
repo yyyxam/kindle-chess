@@ -14,7 +14,7 @@ use crate::{
     ui::{
         events::{AppEvent, Rectangle, RectangleExt},
         renderer::Renderer,
-        widgets::{BoardWidget, SidebarWidget},
+        widgets::{BoardWidget, Button, SidebarWidget},
     },
 };
 
@@ -60,22 +60,49 @@ pub enum Transition {
 // The top-level launcher. Add a button here for every future game.
 
 pub struct HomeScreen {
-    pub chess_button: Rectangle,
-    // pub game_of_ur_button: Rectangle,
-    // pub settings_button: Rectangle,
+    pub chess_button: Button,
+    pub ongoing_games_button: Button,
+    // pub game_of_ur_button: Button,
+    // pub settings_button: Button,
+
+    // Auth bootstrap state. `auth_started` flips to true on the first render so
+    // we kick the token check exactly once. Buttons stay inert until `app` is
+    // populated — either by the bootstrap (token already valid) or by a
+    // ChessReady event bubbling up from a popped ChessAuthScreen.
+    pub app: Option<ChessApp>,
+    pub auth_started: bool,
 }
 
 impl HomeScreen {
     pub fn new() -> Self {
         // Layout: 1072 × 1448 total canvas
         // Place the chess button centred in the upper half.
-        const BTN_W: u16 = 400;
+        const BTN_W: u16 = 600;
         const BTN_H: u16 = 120;
-        const CENTER_X: i16 = (1072 - BTN_W as i16) / 2; // 336
-        const CENTER_Y: i16 = (1448 / 2 - BTN_H as i16) / 2; // 304
+        const CENTER_X: i16 = 1072 / 2; // 336
+        const CENTER_Y: i16 = 1448 / 2; // 304
 
         Self {
-            chess_button: Rectangle::new(CENTER_X, CENTER_Y, BTN_W, BTN_H),
+            chess_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y - (10 + BTN_H as i16),
+                BTN_W,
+                BTN_H,
+                String::from("Demo"),
+                45.0,
+                true,
+            ),
+            ongoing_games_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y + 10 + BTN_H as i16,
+                BTN_W,
+                BTN_H,
+                String::from("Ongoing Games"),
+                45.0,
+                true,
+            ),
+            app: None,
+            auth_started: false,
         }
     }
 }
@@ -102,13 +129,13 @@ impl ChessGameScreen {
 
 pub struct OngoingChessGamesScreen {
     pub app: ChessApp,
-    pub prev_page_button: Rectangle,
-    pub next_page_button: Rectangle,
-    pub chessgame_button_0: Rectangle,
-    pub chessgame_button_1: Rectangle,
-    pub chessgame_button_2: Rectangle,
-    pub chessgame_button_3: Rectangle,
-    pub back_button: Rectangle,
+    pub prev_page_button: Button,
+    pub next_page_button: Button,
+    pub chessgame_button_0: Button,
+    pub chessgame_button_1: Button,
+    pub chessgame_button_2: Button,
+    pub chessgame_button_3: Button,
+    pub back_button: Button,
 
     // Async fetch state. `games == None && error == None && !loading` means the
     // screen has not yet kicked off its initial fetch — `render` will trigger it.
@@ -123,41 +150,72 @@ impl OngoingChessGamesScreen {
         // Place the chess button centred in the upper half.
         const BTN_W: u16 = 800;
         const BTN_H: u16 = 120;
-        const CENTER_X: i16 = (1072 - BTN_W as i16) / 2; // 336
-        const CENTER_Y: i16 = (1448 / 5 - BTN_H as i16) / 2; // 304
+        const CENTER_X: i16 = 1072 / 2; // 336
+        const CENTER_Y: i16 = 1448 / 2; // 304
         Self {
             app: app,
-            prev_page_button: Rectangle::new(CENTER_X / 2, CENTER_Y, BTN_W / 2, BTN_H - 20),
-            next_page_button: Rectangle::new(CENTER_X / 2, CENTER_Y, BTN_W / 2, BTN_H - 20),
-            chessgame_button_0: Rectangle::new(
-                CENTER_X / 2,
-                BTN_H.cast_signed() + CENTER_Y,
+            prev_page_button: Button::new(
+                CENTER_X - (BTN_W as i16 / 2 + 8),
+                CENTER_Y * 2 / 5,
+                BTN_W / 2,
+                BTN_H - 20,
+                "<".to_string(),
+                40.0,
+                true,
+            ),
+            next_page_button: Button::new(
+                CENTER_X + 8,
+                CENTER_Y * 2 / 5,
+                BTN_W / 2,
+                BTN_H - 20,
+                ">".to_string(),
+                40.0,
+                true,
+            ),
+            chessgame_button_0: Button::new(
+                CENTER_X - (8 + BTN_W as i16 / 2),
+                CENTER_Y - (BTN_H as i16 / 2 + 10),
                 BTN_W / 2,
                 BTN_H,
+                "-".to_string(),
+                40.0,
+                true,
             ),
-            chessgame_button_1: Rectangle::new(
-                CENTER_X + CENTER_X / 2,
-                BTN_H.cast_signed() + CENTER_Y,
+            chessgame_button_1: Button::new(
+                CENTER_X + 8,
+                CENTER_Y - (BTN_H as i16 / 2 + 10),
                 BTN_W / 2,
                 BTN_H,
+                "-".to_string(),
+                40.0,
+                true,
             ),
-            chessgame_button_2: Rectangle::new(
-                CENTER_X / 2,
-                2 * BTN_H.cast_signed() + CENTER_Y,
+            chessgame_button_2: Button::new(
+                CENTER_X - (8 + BTN_W as i16 / 2),
+                CENTER_Y + (BTN_H as i16 / 2 + 10),
                 BTN_W / 2,
                 BTN_H,
+                "-".to_string(),
+                40.0,
+                true,
             ),
-            chessgame_button_3: Rectangle::new(
-                CENTER_X + CENTER_X / 2,
-                2 * BTN_H.cast_signed() + CENTER_Y,
+            chessgame_button_3: Button::new(
+                CENTER_X + 8,
+                CENTER_Y + (BTN_H as i16 / 2 + 10),
                 BTN_W / 2,
                 BTN_H,
+                String::from("-"),
+                40.0,
+                true,
             ),
-            back_button: Rectangle::new(
-                CENTER_X,
-                3 * BTN_H.cast_signed() + CENTER_Y,
+            back_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y * 2 - (BTN_H as i16 - 20) - 32,
                 BTN_W,
                 BTN_H - 20,
+                "back".to_string(),
+                40.0,
+                true,
             ),
 
             games: None,
@@ -174,6 +232,8 @@ pub struct ChessAuthScreen {
     pub auth_status: Rectangle,
     pub qr_image: Option<ImageBuffer<Luma<u8>, Vec<u8>>>,
     pub auth_url: Option<String>,
+    // First-render flag: kick the QR/authenticate flow exactly once.
+    pub auth_started: bool,
 }
 
 impl ChessAuthScreen {
@@ -183,6 +243,7 @@ impl ChessAuthScreen {
             auth_status: Rectangle::new(286, 940, 500, 60),
             qr_image: None,
             auth_url: None,
+            auth_started: false,
         }
     }
 }

@@ -5,36 +5,35 @@ use log::{debug, info, warn};
 use crate::{
     api::oauth::{authenticate, get_user_info, load_token},
     models::{
+        board_api::PlayedBy,
         chess::ChessApp,
         ui::{
             ChessAuthScreen, ChessGameScreen, Display, HomeScreen, OngoingChessGamesScreen, Screen,
             Transition,
         },
     },
-    ui::events::{AppEvent, RectangleExt, TouchKind},
+    ui::{
+        events::{AppEvent, RectangleExt, TouchKind},
+        renderer::DrawColor,
+        widgets::Button,
+    },
 };
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
 impl Screen for HomeScreen {
     fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::ui::renderer::DrawColor;
-        display.renderer.clear(DrawColor::White)?;
-        display
-            .renderer
-            .draw_rectangle(self.chess_button, DrawColor::White, true)?;
-        display
-            .renderer
-            .draw_rectangle(self.chess_button, DrawColor::Black, false)?;
+        // First render: kick the silent auth bootstrap exactly once. The task
+        // posts ChessReady (cached token still valid) or AuthFailed (need QR
+        // flow) — both routed back through handle_event.
+        if !self.auth_started {
+            self.auth_started = true;
+            kick_auth_bootstrap(display.event_tx.clone());
+        }
 
-        let label = "CHESS";
-        let size_px = 64.0;
-        let (tw, th) = display.renderer.measure_text(label, size_px);
-        let tx = self.chess_button.x + (self.chess_button.width as i16 - tw as i16) / 2;
-        let ty = self.chess_button.y + (self.chess_button.height as i16 - th as i16) / 2;
-        display
-            .renderer
-            .draw_text(tx, ty, label, size_px, DrawColor::Black)?;
+        display.renderer.clear(DrawColor::White)?;
+        self.chess_button.draw(&mut display.renderer)?;
+        self.ongoing_games_button.draw(&mut display.renderer)?;
 
         display.renderer.present()?;
         Ok(())
@@ -46,82 +45,36 @@ impl Screen for HomeScreen {
         display: &mut Display,
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
+            // Auth completed — either from our own bootstrap, or bubbled up
+            // from a popped ChessAuthScreen after the QR flow finished.
+            AppEvent::ChessReady(app) => {
+                info!("ChessApp ready — buttons live");
+                self.app = Some(app);
+                Ok(Transition::Redraw)
+            }
+
+            // Bootstrap couldn't authenticate silently. Hand control to the
+            // QR-flow screen; on success it'll pop and re-emit ChessReady.
+            AppEvent::AuthFailed(e) => {
+                warn!("Silent auth failed ({}) — pushing ChessAuthScreen", e);
+                Ok(Transition::Push(Box::new(ChessAuthScreen::new())))
+            }
+
             AppEvent::Touch(touch) => {
                 if touch.kind == TouchKind::Up {
-                    if self.chess_button.contains(touch.x, touch.y) {
-                        info!("Chess button pressed — launching chess");
-                        info!("Checking Authentication Status");
-                        // TODO: Also check for internet connection before sending to auth screen
-                        //
-                        //
-                        let maybe_token = load_token().map_err(|e| e.to_string());
-                        let tx = display.event_tx.clone(); // clone sender for auth task
-
-                        // Spawn async work on tokio runtime
-                        tokio::spawn(async move {
-                            match maybe_token {
-                                // Token exists on disk
-                                Ok(Some(token_info)) => {
-                                    match get_user_info(&token_info.access_token)
-                                        .await
-                                        .map_err(|e| e.to_string())
-                                    {
-                                        Ok(user_info) => {
-                                            info!(
-                                                "Successfully authenticated from token as: {}",
-                                                user_info.username
-                                            );
-                                            let _ = tx
-                                                .send(AppEvent::AuthSuccess(token_info, user_info));
-                                        }
-                                        Err(_) => {
-                                            // Stale token, reauthenticate
-                                            // Send EventSender so QrReady-Event can be sent
-                                            match authenticate(tx.clone())
-                                                .await
-                                                .map_err(|e| e.to_string())
-                                            {
-                                                Ok((token_info, user_info)) => {
-                                                    let _ = tx.send(AppEvent::AuthSuccess(
-                                                        token_info, user_info,
-                                                    ));
-                                                }
-                                                Err(e) => {
-                                                    let _ = tx.send(AppEvent::AuthFailed(e));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                // (Re-)Authentication needed
-                                Ok(None) => {
-                                    // Stale token, reauthenticate
-                                    // Send EventSender so QrReady-Event can be sent
-                                    match authenticate(tx.clone()).await.map_err(|e| e.to_string())
-                                    {
-                                        Ok((token_info, user_info)) => {
-                                            info!(
-                                                "Successfully re-authenticated as: {}",
-                                                user_info.username
-                                            );
-                                            let _ = tx
-                                                .send(AppEvent::AuthSuccess(token_info, user_info));
-                                        }
-                                        Err(e) => {
-                                            let _ = tx.send(AppEvent::AuthFailed(e));
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    let _ = tx.send(AppEvent::AuthFailed(e));
-                                }
-                            }
-                        });
-
-                        // TODO: push ChessAuthScreen or ChessGameScreen depending on auth state
-                        return Ok(Transition::Push(Box::new(ChessAuthScreen::new())));
+                    let Some(app) = self.app.clone() else {
+                        info!("Button tap ignored — auth not yet complete");
+                        return Ok(Transition::Stay);
+                    };
+                    if self.chess_button.rect.contains(touch.x, touch.y) {
+                        info!("Chess button pressed — launching chess game");
+                        return Ok(Transition::Push(Box::new(ChessGameScreen::new(app))));
+                    } else if self.ongoing_games_button.rect.contains(touch.x, touch.y) {
+                        info!("Ongoing-games button pressed");
+                        return Ok(Transition::Push(Box::new(OngoingChessGamesScreen::new(
+                            app,
+                        ))));
                     }
-                    // TODO: else if self.other_button.contains(touch.x, touch.x) {...}
                 }
 
                 Ok(Transition::Redraw)
@@ -145,6 +98,49 @@ impl Screen for HomeScreen {
             _ => Ok(Transition::Stay),
         }
     }
+}
+
+// Spawned from HomeScreen::render on first paint. Tries the cached token,
+// validates it via get_user_info, and on success builds the ChessApp.
+// Sends ChessReady on success, AuthFailed otherwise — never authenticate()s
+// (that's ChessAuthScreen's job, since it owns the QR display).
+fn kick_auth_bootstrap(tx: std::sync::mpsc::Sender<AppEvent>) {
+    let maybe_token = load_token().map_err(|e| e.to_string());
+    tokio::spawn(async move {
+        match maybe_token {
+            Ok(Some(token_info)) => {
+                // Convert the non-Send Box<dyn Error> into a String before the
+                // next .await so the future itself stays Send.
+                let user_info = get_user_info(&token_info.access_token)
+                    .await
+                    .map_err(|e| e.to_string());
+                match user_info {
+                    Ok(user_info) => {
+                        info!("Authenticated from cached token as: {}", user_info.username);
+                        match ChessApp::new_online(token_info, user_info).await {
+                            Ok(app) => {
+                                let _ = tx.send(AppEvent::ChessReady(app));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AppEvent::AuthFailed(e.to_string()));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Cached token rejected: {} — needs re-auth", e);
+                        let _ = tx.send(AppEvent::AuthFailed(e));
+                    }
+                }
+            }
+            Ok(None) => {
+                info!("No cached token on disk — needs auth");
+                let _ = tx.send(AppEvent::AuthFailed("no token".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::AuthFailed(e));
+            }
+        }
+    });
 }
 
 // ─── ChessGameScreen ──────────────────────────────────────────────────────────
@@ -225,9 +221,26 @@ impl Screen for ChessGameScreen {
 
 impl Screen for ChessAuthScreen {
     fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
-        display
-            .renderer
-            .clear(crate::ui::renderer::DrawColor::White)?;
+        // Kick the QR/PKCE flow exactly once. authenticate() will post
+        // QrReady once the QR image is ready, and AuthSuccess once Lichess
+        // redirects to the local callback.
+        if !self.auth_started {
+            self.auth_started = true;
+            let tx = display.event_tx.clone();
+            tokio::spawn(async move {
+                match authenticate(tx.clone()).await {
+                    Ok((token_info, user_info)) => {
+                        info!("QR auth succeeded as: {}", user_info.username);
+                        let _ = tx.send(AppEvent::AuthSuccess(token_info, user_info));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppEvent::AuthFailed(e.to_string()));
+                    }
+                }
+            });
+        }
+
+        display.renderer.clear(DrawColor::White)?;
         if let Some(ref img) = self.qr_image {
             display.renderer.draw_image(
                 self.qr_code.x,
@@ -237,17 +250,13 @@ impl Screen for ChessAuthScreen {
                 img,
             )?;
         } else {
-            display.renderer.draw_rectangle(
-                self.qr_code,
-                crate::ui::renderer::DrawColor::LightGray,
-                true,
-            )?;
+            display
+                .renderer
+                .draw_rectangle(self.qr_code, DrawColor::LightGray, true)?;
         }
-        display.renderer.draw_rectangle(
-            self.auth_status,
-            crate::ui::renderer::DrawColor::LightGray,
-            true,
-        )?;
+        display
+            .renderer
+            .draw_rectangle(self.auth_status, DrawColor::LightGray, true)?;
         display.renderer.present()?;
         Ok(())
     }
@@ -258,9 +267,8 @@ impl Screen for ChessAuthScreen {
         display: &mut Display,
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
-            AppEvent::Touch(touch) => Ok(Transition::Stay),
-
             AppEvent::AuthSuccess(token, user) => {
+                // Build the ChessApp off-thread; result comes back as ChessReady.
                 let tx = display.event_tx.clone();
                 tokio::spawn(async move {
                     match ChessApp::new_online(token, user).await {
@@ -272,14 +280,27 @@ impl Screen for ChessAuthScreen {
                         }
                     }
                 });
-                Ok(Transition::Stay) // stays on auth screen until ChessReady arrives
+                Ok(Transition::Stay)
             }
 
-            AppEvent::ChessReady(app) => Ok(Transition::Push(Box::new(ChessGameScreen::new(app)))),
+            // Re-emit so HomeScreen (top-of-stack after our Pop) captures the
+            // app, then pop ourselves off.
+            AppEvent::ChessReady(app) => {
+                let _ = display.event_tx.send(AppEvent::ChessReady(app));
+                Ok(Transition::Pop)
+            }
+
             AppEvent::QrReady(img) => {
                 self.qr_image = Some(img);
                 Ok(Transition::Redraw)
             }
+
+            AppEvent::AuthFailed(e) => {
+                warn!("QR auth failed: {}", e);
+                // TODO: surface error visually + offer retry. For now stay put.
+                Ok(Transition::Stay)
+            }
+
             _ => Ok(Transition::Stay),
         }
     }
@@ -327,7 +348,7 @@ impl Screen for OngoingChessGamesScreen {
 
         display.renderer.clear(DrawColor::White)?;
 
-        let size_px = 64.0;
+        let size_px = 24.0;
 
         if let Some(err) = &self.error {
             let label = format!("Error: {}", err);
@@ -338,27 +359,32 @@ impl Screen for OngoingChessGamesScreen {
                 .renderer
                 .draw_text(tx, ty, &label, size_px, DrawColor::Black)?;
         } else if let Some(games) = &self.games {
-            let buttons = [
-                self.chessgame_button_0,
-                self.chessgame_button_1,
-                self.chessgame_button_2,
-                self.chessgame_button_3,
+            let buttons: [&mut Button; 4] = [
+                &mut self.chessgame_button_0,
+                &mut self.chessgame_button_1,
+                &mut self.chessgame_button_2,
+                &mut self.chessgame_button_3,
             ];
-            for (i, btn) in buttons.iter().enumerate() {
-                display.renderer.draw_rectangle(*btn, DrawColor::White, true)?;
-                display.renderer.draw_rectangle(*btn, DrawColor::Black, false)?;
-
-                let label = match games.now_playing.get(i) {
-                    Some(g) => format!("{}  vs  opp", g.game_id),
-                    None => "—".to_string(),
+            // Assumes now_playing has ≤4 entries.
+            for (k, game) in games.now_playing.iter().enumerate() {
+                let opp = match &game.opponent {
+                    PlayedBy::User(player) => player.name.clone(),
+                    PlayedBy::Ai(computer) => match computer.ai_level {
+                        Some(level) => format!("AI lvl {}", level),
+                        None => String::from("AI"),
+                    },
                 };
-                let (tw, th) = display.renderer.measure_text(&label, size_px);
-                let tx = btn.x + (btn.width as i16 - tw as i16) / 2;
-                let ty = btn.y + (btn.height as i16 - th as i16) / 2;
-                display
-                    .renderer
-                    .draw_text(tx, ty, &label, size_px, DrawColor::Black)?;
+                let mut l = format!("VS {opp}");
+                if game.is_my_turn {
+                    l = format!("> {l} <");
+                }
+                buttons[k].label = l;
+                buttons[k].draw(&mut display.renderer)?;
             }
+
+            self.back_button.draw(&mut display.renderer)?;
+            self.next_page_button.draw(&mut display.renderer)?;
+            self.prev_page_button.draw(&mut display.renderer)?;
         } else {
             let label = "Loading…";
             let (tw, th) = display.renderer.measure_text(label, size_px);
@@ -394,7 +420,7 @@ impl Screen for OngoingChessGamesScreen {
             }
 
             AppEvent::Touch(touch) => {
-                if touch.kind == TouchKind::Up && self.back_button.contains(touch.x, touch.y) {
+                if touch.kind == TouchKind::Up && self.back_button.rect.contains(touch.x, touch.y) {
                     return Ok(Transition::Pop);
                 }
                 Ok(Transition::Stay)

@@ -43,10 +43,17 @@ impl App {
         }
         info!("Initial render is done");
 
-        // Periodic-redraw cadence. The Kindle's e-ink Xorg sometimes drops the
-        // very first paint; re-rendering on a timer ensures pixels land.
+        // Bootstrap-only periodic redraw. The Kindle's e-ink Xorg occasionally
+        // drops the very first paint; we retry every 100 ms until *any*
+        // X11-originated event proves the server is responsive, with a 1.5 s
+        // safety cap so we don't spin forever. Once disabled, redraws happen
+        // only on `Transition::Redraw` — otherwise the unconditional 10 Hz
+        // redraw stacks `clear() + many put_image()` calls per frame, which
+        // x11rb auto-flushes in pieces and shows up as flicker.
         let tick = Duration::from_millis(16);
         let redraw_period = Duration::from_millis(100);
+        let bootstrap_deadline = Instant::now() + Duration::from_millis(1500);
+        let mut x11_alive = false;
         let mut last_redraw = Instant::now();
 
         loop {
@@ -54,7 +61,10 @@ impl App {
             let event = match self.display.event_rx.recv_timeout(tick) {
                 Ok(e) => e,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    if last_redraw.elapsed() >= redraw_period {
+                    if !x11_alive
+                        && Instant::now() < bootstrap_deadline
+                        && last_redraw.elapsed() >= redraw_period
+                    {
                         if let Some(screen) = self.screen_stack.last_mut() {
                             if let Err(e) = screen.render(&mut self.display) {
                                 error!("Periodic render error: {}", e);
@@ -69,6 +79,15 @@ impl App {
                     break;
                 }
             };
+
+            // Any X11-originated event means the server is alive — turn off
+            // the bootstrap retry loop.
+            if matches!(
+                event,
+                AppEvent::Expose | AppEvent::Touch(_) | AppEvent::WindowUnmapped
+            ) {
+                x11_alive = true;
+            }
 
             // Check global triple-tap before handing to the active screen
             if let AppEvent::Touch(ref touch) = event {
