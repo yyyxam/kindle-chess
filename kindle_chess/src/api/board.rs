@@ -96,7 +96,11 @@ impl BoardAPI<Idle> {
                 white: None,
                 black: None,
                 player0_white: false,
-                turn: if my_turn { Turn::Playing } else { Turn::Waiting },
+                turn: if my_turn {
+                    Turn::Playing
+                } else {
+                    Turn::Waiting
+                },
             },
         }
     }
@@ -118,7 +122,10 @@ impl BoardAPI<InGame> {
             self.state.game_id,
             board_move
         );
-        info!("Sending move {} for game {}", board_move, self.state.game_id);
+        info!(
+            "Sending move {} for game {}",
+            board_move, self.state.game_id
+        );
 
         let response = authenticated_request(url, &self.token, HttpMethod::POST).await?;
 
@@ -211,9 +218,14 @@ impl BoardAPI<InGame> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
             GameStateStreamEvent::GameFull(full) => {
-                let player0_white = matches!(&full.white, PlayedBy::User(p) if p.id == self.user.id);
+                let player0_white =
+                    matches!(&full.white, PlayedBy::User(p) if p.id == self.user.id);
                 let my_turn = player0_turn(full.state.moves.clone(), player0_white);
-                let turn = if my_turn { Turn::Playing } else { Turn::Waiting };
+                let turn = if my_turn {
+                    Turn::Playing
+                } else {
+                    Turn::Waiting
+                };
 
                 // Update local bookkeeping so subsequent GameState events can
                 // resolve whose-turn-it-is from `player0_white`.
@@ -231,7 +243,11 @@ impl BoardAPI<InGame> {
             }
             GameStateStreamEvent::GameState(state) => {
                 let my_turn = player0_turn(state.moves, self.state.player0_white);
-                let turn = if my_turn { Turn::Playing } else { Turn::Waiting };
+                let turn = if my_turn {
+                    Turn::Playing
+                } else {
+                    Turn::Waiting
+                };
                 self.state.turn = turn.clone();
                 let _ = tx.send(AppEvent::TurnChanged(turn));
             }
