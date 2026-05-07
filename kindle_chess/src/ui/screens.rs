@@ -18,6 +18,7 @@ use crate::{
         widgets::Button,
     },
 };
+use std::sync::mpsc::Sender;
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ impl Screen for HomeScreen {
     fn handle_event(
         &mut self,
         event: AppEvent,
-        display: &mut Display,
+        _display: &mut Display,
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
             // Auth completed — either from our own bootstrap, or bubbled up
@@ -117,14 +118,9 @@ fn kick_auth_bootstrap(tx: std::sync::mpsc::Sender<AppEvent>) {
                 match user_info {
                     Ok(user_info) => {
                         info!("Authenticated from cached token as: {}", user_info.username);
-                        match ChessApp::new_online(token_info, user_info).await {
-                            Ok(app) => {
-                                let _ = tx.send(AppEvent::ChessReady(app));
-                            }
-                            Err(e) => {
-                                let _ = tx.send(AppEvent::AuthFailed(e.to_string()));
-                            }
-                        }
+                        let _ = tx.send(AppEvent::ChessReady(ChessApp::new_online(
+                            token_info, user_info,
+                        )));
                     }
                     Err(e) => {
                         warn!("Cached token rejected: {} — needs re-auth", e);
@@ -147,6 +143,14 @@ fn kick_auth_bootstrap(tx: std::sync::mpsc::Sender<AppEvent>) {
 
 impl Screen for ChessGameScreen {
     fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
+        // First paint after Push: spawn the game-state stream task. It owns a
+        // clone of BoardAPI<InGame>; everything we care about comes back as
+        // GameFullReceived / TurnChanged events (see kick_game_stream).
+        if !self.stream_started {
+            self.stream_started = true;
+            kick_game_stream(&self.app, display.event_tx.clone());
+        }
+
         self.board.render(&mut display.renderer)?;
         self.sidebar.render(&mut display.renderer)?;
         display.renderer.present()?;
@@ -159,6 +163,24 @@ impl Screen for ChessGameScreen {
         display: &mut Display,
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
+            AppEvent::GameFullReceived {
+                white,
+                black,
+                player0_white,
+                turn,
+            } => {
+                self.app
+                    .apply_game_full(white, black, player0_white, turn.clone());
+                self.sidebar.set_turn(turn);
+                Ok(Transition::Redraw)
+            }
+
+            AppEvent::TurnChanged(turn) => {
+                self.app.apply_turn(turn.clone());
+                self.sidebar.set_turn(turn);
+                Ok(Transition::Redraw)
+            }
+
             AppEvent::Touch(touch) => {
                 if let Some(ev) = self.board.handle_touch(&touch) {
                     return self.handle_event(ev, display);
@@ -177,7 +199,7 @@ impl Screen for ChessGameScreen {
                     chess_move.from.to_algebraic(),
                     chess_move.to.to_algebraic(),
                 );
-                // TODO: send move to backend
+                // TODO: spawn `move_piece` via `self.app.online_in_game_api()`.
                 Ok(Transition::Redraw)
             }
 
@@ -187,9 +209,8 @@ impl Screen for ChessGameScreen {
             }
 
             AppEvent::ShowMenu => {
-                info!("Menu requested");
-                // TODO: Push settings screen
-                Ok(Transition::Stay)
+                info!("Menu requested — returning to home screen");
+                Ok(Transition::Pop)
             }
 
             AppEvent::ExitToMenu => {
@@ -215,6 +236,23 @@ impl Screen for ChessGameScreen {
             _ => Ok(Transition::Stay),
         }
     }
+}
+
+// Spawns the game-state stream onto the tokio runtime. The task owns a fresh
+// clone of `BoardAPI<InGame>`; mutations to the clone's `state` are local
+// bookkeeping. Every state change the screen needs is sent back as an
+// `AppEvent`. No-op when the screen wasn't pushed with an in-game backend
+// (e.g. the Demo button path, which still uses an Idle ChessApp).
+fn kick_game_stream(app: &ChessApp, tx: Sender<AppEvent>) {
+    let Some(mut api) = app.online_in_game_api() else {
+        warn!("ChessGameScreen has no in-game backend — skipping stream");
+        return;
+    };
+    tokio::spawn(async move {
+        if let Err(e) = api.stream_game_event(tx).await {
+            warn!("Game-state stream errored: {}", e);
+        }
+    });
 }
 
 // ─── ChessAuthScreen ──────────────────────────────────────────────────────────
@@ -268,18 +306,11 @@ impl Screen for ChessAuthScreen {
     ) -> Result<Transition, Box<dyn std::error::Error>> {
         match event {
             AppEvent::AuthSuccess(token, user) => {
-                // Build the ChessApp off-thread; result comes back as ChessReady.
-                let tx = display.event_tx.clone();
-                tokio::spawn(async move {
-                    match ChessApp::new_online(token, user).await {
-                        Ok(app) => {
-                            let _ = tx.send(AppEvent::ChessReady(app));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppEvent::AuthFailed(e.to_string()));
-                        }
-                    }
-                });
+                // ChessApp::new_online is sync (no I/O at construction), so just
+                // post ChessReady directly.
+                let _ = display
+                    .event_tx
+                    .send(AppEvent::ChessReady(ChessApp::new_online(token, user)));
                 Ok(Transition::Stay)
             }
 
@@ -308,6 +339,8 @@ impl Screen for ChessAuthScreen {
 
 // ─── OngoingChessGamesScreen ──────────────────────────────────────────────────────────
 
+const GAMES_PER_PAGE: usize = 4;
+
 impl OngoingChessGamesScreen {
     /// Spawn the ongoing-games fetch onto the tokio runtime. Idempotent w.r.t.
     /// `self.loading` — call freely from `render` (initial load) or a future
@@ -317,7 +350,7 @@ impl OngoingChessGamesScreen {
         if self.loading {
             return;
         }
-        let Some(api) = self.app.online_api() else {
+        let Some(api) = self.app.online_idle_api() else {
             self.error = Some("Offline backend has no ongoing games".into());
             return;
         };
@@ -333,6 +366,63 @@ impl OngoingChessGamesScreen {
                 }
             }
         });
+    }
+
+    fn page_count(&self) -> usize {
+        match &self.games {
+            Some(g) => g.now_playing.len().div_ceil(GAMES_PER_PAGE),
+            None => 0,
+        }
+    }
+
+    /// Bake labels for `index`'s page of games into the four chess-game buttons,
+    /// and update `self.page_index`. No-op when `games` hasn't loaded yet — the
+    /// `OngoingGamesLoaded` handler calls this again once data arrives. Slots
+    /// past the available game count get a "-" so they're visibly inert; the
+    /// touch handler also short-circuits taps on those slots.
+    fn set_page(&mut self, index: usize) {
+        self.page_index = index;
+        let Some(games) = self.games.as_ref() else {
+            return;
+        };
+        let buttons: [&mut Button; 4] = [
+            &mut self.chessgame_button_0,
+            &mut self.chessgame_button_1,
+            &mut self.chessgame_button_2,
+            &mut self.chessgame_button_3,
+        ];
+        let start = index * GAMES_PER_PAGE;
+        for (k, btn) in buttons.into_iter().enumerate() {
+            match games.now_playing.get(start + k) {
+                Some(game) => {
+                    let opp = match &game.opponent {
+                        PlayedBy::User(player) => player.name.clone(),
+                        PlayedBy::Ai(computer) => match computer.ai_level {
+                            Some(level) => format!("AI lvl {}", level),
+                            None => String::from("AI"),
+                        },
+                    };
+                    let mut l = format!("VS {opp}");
+                    if game.is_my_turn {
+                        l = format!("> {l} <");
+                    }
+                    btn.label = l;
+                }
+                None => {
+                    btn.label = "-".to_string();
+                }
+            }
+        }
+    }
+
+    /// Resolve which game `chessgame_button_{k}` currently maps to, given the
+    /// current page. Returns `None` for slots that are inert ("-"-labelled
+    /// because the current page has fewer than 4 games left).
+    fn game_at_slot(&self, k: usize) -> Option<&crate::models::board_api::GameData> {
+        self.games
+            .as_ref()?
+            .now_playing
+            .get(self.page_index * GAMES_PER_PAGE + k)
     }
 }
 
@@ -358,30 +448,14 @@ impl Screen for OngoingChessGamesScreen {
             display
                 .renderer
                 .draw_text(tx, ty, &label, size_px, DrawColor::Black)?;
-        } else if let Some(games) = &self.games {
-            let buttons: [&mut Button; 4] = [
-                &mut self.chessgame_button_0,
-                &mut self.chessgame_button_1,
-                &mut self.chessgame_button_2,
-                &mut self.chessgame_button_3,
-            ];
-            // Assumes now_playing has ≤4 entries.
-            for (k, game) in games.now_playing.iter().enumerate() {
-                let opp = match &game.opponent {
-                    PlayedBy::User(player) => player.name.clone(),
-                    PlayedBy::Ai(computer) => match computer.ai_level {
-                        Some(level) => format!("AI lvl {}", level),
-                        None => String::from("AI"),
-                    },
-                };
-                let mut l = format!("VS {opp}");
-                if game.is_my_turn {
-                    l = format!("> {l} <");
-                }
-                buttons[k].label = l;
-                buttons[k].draw(&mut display.renderer)?;
-            }
-
+        } else if self.games.is_some() {
+            // Labels were baked into the buttons by `set_page` (called from
+            // OngoingGamesLoaded and from next/prev taps), so render is just
+            // a draw pass.
+            self.chessgame_button_0.draw(&mut display.renderer)?;
+            self.chessgame_button_1.draw(&mut display.renderer)?;
+            self.chessgame_button_2.draw(&mut display.renderer)?;
+            self.chessgame_button_3.draw(&mut display.renderer)?;
             self.back_button.draw(&mut display.renderer)?;
             self.next_page_button.draw(&mut display.renderer)?;
             self.prev_page_button.draw(&mut display.renderer)?;
@@ -409,6 +483,8 @@ impl Screen for OngoingChessGamesScreen {
                 info!("Ongoing games loaded: {} entries", list.now_playing.len());
                 self.games = Some(list);
                 self.loading = false;
+                // Bake labels for the current page now that we have data.
+                self.set_page(self.page_index);
                 Ok(Transition::Redraw)
             }
 
@@ -420,8 +496,55 @@ impl Screen for OngoingChessGamesScreen {
             }
 
             AppEvent::Touch(touch) => {
-                if touch.kind == TouchKind::Up && self.back_button.rect.contains(touch.x, touch.y) {
+                if touch.kind != TouchKind::Up {
+                    return Ok(Transition::Stay);
+                }
+
+                if self.back_button.rect.contains(touch.x, touch.y) {
                     return Ok(Transition::Pop);
+                }
+
+                if self.next_page_button.rect.contains(touch.x, touch.y) {
+                    let last = self.page_count().saturating_sub(1);
+                    if self.page_index < last {
+                        self.set_page(self.page_index + 1);
+                        return Ok(Transition::Redraw);
+                    }
+                    return Ok(Transition::Stay);
+                }
+
+                if self.prev_page_button.rect.contains(touch.x, touch.y) {
+                    if self.page_index > 0 {
+                        self.set_page(self.page_index - 1);
+                        return Ok(Transition::Redraw);
+                    }
+                    return Ok(Transition::Stay);
+                }
+
+                // Game-button taps. Resolve via `game_at_slot` so paginated
+                // slots without backing data are inert.
+                let game_buttons = [
+                    &self.chessgame_button_0,
+                    &self.chessgame_button_1,
+                    &self.chessgame_button_2,
+                    &self.chessgame_button_3,
+                ];
+                for (k, btn) in game_buttons.into_iter().enumerate() {
+                    if !btn.rect.contains(touch.x, touch.y) {
+                        continue;
+                    }
+                    let Some(game) = self.game_at_slot(k) else {
+                        return Ok(Transition::Stay);
+                    };
+                    info!(
+                        "Picked ongoing game (page {}, slot {}): {}",
+                        self.page_index, k, game.game_id
+                    );
+                    let game_app = self
+                        .app
+                        .clone()
+                        .attach_game(game.game_id.clone(), game.is_my_turn);
+                    return Ok(Transition::Push(Box::new(ChessGameScreen::new(game_app))));
                 }
                 Ok(Transition::Stay)
             }

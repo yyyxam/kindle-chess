@@ -1,33 +1,20 @@
-/* TODO (backlog)
- * Online play or
- * Local play (to be implemented)
- * as different ChessBackends
- */
-
 use crate::models::{
-    board_api::BoardAPI,
+    board_api::{BoardAPI, Idle, InGame, PlayedBy, Turn},
     board_local::BoardLocal,
-    chess::{
-        ChessApp,
-        ChessBackend::{self},
-    },
+    chess::{ChessApp, ChessBackend},
     oauth::{LichessUser, TokenInfo},
 };
+use log::warn;
 
 impl ChessApp {
-    /// Constructs an online backend from an already-authenticated token.
-    /// Authentication must be completed before calling this.
-    pub async fn new_online(
-        token: TokenInfo,
-        user: LichessUser,
-    ) -> Result<ChessApp, Box<dyn std::error::Error>> {
-        let board_api = BoardAPI::new((token, user)).await?;
-        Ok(Self {
-            backend: ChessBackend::Online(board_api),
-        })
+    /// Constructs an online backend in the `Idle` state. No game is scoped
+    /// yet — call `attach_game` after picking one from the ongoing-games list.
+    pub fn new_online(token: TokenInfo, user: LichessUser) -> ChessApp {
+        Self {
+            backend: ChessBackend::OnlineIdle(BoardAPI::<Idle>::new(token, user)),
+        }
     }
 
-    /// Constructs an offline backend (not implemented).
     pub fn new_offline() -> ChessApp {
         let board_local = BoardLocal::new(String::new());
         Self {
@@ -35,39 +22,68 @@ impl ChessApp {
         }
     }
 
-    // Getter for the API
-    #[allow(dead_code)]
-    fn board_api(&mut self) -> Option<&mut BoardAPI> {
-        match &mut self.backend {
-            ChessBackend::Offline(_) => None,
-            ChessBackend::Online(board_api) => Some(board_api),
-        }
+    /// Transition the underlying API from `Idle` to `InGame`. `my_turn` is the
+    /// snapshot from `GameData.is_my_turn` so the sidebar can render an initial
+    /// turn status before the game-state stream takes over.
+    pub fn attach_game(mut self, game_id: String, my_turn: bool) -> Self {
+        self.backend = match self.backend {
+            ChessBackend::OnlineIdle(api) => {
+                ChessBackend::OnlineInGame(api.attach_game(game_id, my_turn))
+            }
+            other => {
+                warn!("attach_game called on non-idle backend; ignored");
+                other
+            }
+        };
+        self
     }
 
-    /// Returns a cloned `BoardAPI` for use inside async tasks (BoardAPI is `Clone`,
-    /// holds only the auth token + user). Returns `None` for offline backends.
-    pub fn online_api(&self) -> Option<BoardAPI> {
+    /// Cloned `BoardAPI<Idle>` for use in tasks that only need read access to
+    /// the auth scope (e.g. ongoing-games fetch).
+    pub fn online_idle_api(&self) -> Option<BoardAPI<Idle>> {
         match &self.backend {
-            ChessBackend::Online(api) => Some(api.clone()),
-            ChessBackend::Offline(_) => None,
+            ChessBackend::OnlineIdle(api) => Some(api.clone()),
+            _ => None,
         }
     }
 
-    // pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-    //     /* Starts the ChessGameScreen (TODO) and loads/starts a game into the backend (TODO).
-    //      * For now, crudely checks if it's an online game and if so, passes game_id of most recent game to stream it
-    //      */
-    //     let is_online = matches!(self.backend, ChessBackend::Online(_));
+    /// Cloned `BoardAPI<InGame>` for use in tasks scoped to a specific game
+    /// (game-state stream, move submission). The clone's runtime mutations
+    /// stay inside the task — propagate state changes back via `AppEvent`s.
+    pub fn online_in_game_api(&self) -> Option<BoardAPI<InGame>> {
+        match &self.backend {
+            ChessBackend::OnlineInGame(api) => Some(api.clone()),
+            _ => None,
+        }
+    }
 
-    //     let on_games: GameDataList;
-    //     if let Some(api) = self.board_api() {
-    //         let on_games = api.get_ongoing_games(5).await.unwrap().now_playing;
-    //     };
-    //     for game in &on_games {
-    //         info!("Retrieved game-id {}", &game.full_id);
-    //     }
-    //     let game_id = on_games[0].full_id.clone();
-    //     info!("Streaming game id: {}", &game_id);
-    //     Ok(())
-    // }
+    pub fn turn(&self) -> Option<&Turn> {
+        match &self.backend {
+            ChessBackend::OnlineInGame(api) => Some(&api.state.turn),
+            _ => None,
+        }
+    }
+
+    /// Apply the initial `GameFull` snapshot to the in-game state. No-op for
+    /// non-in-game backends.
+    pub fn apply_game_full(
+        &mut self,
+        white: PlayedBy,
+        black: PlayedBy,
+        player0_white: bool,
+        turn: Turn,
+    ) {
+        if let ChessBackend::OnlineInGame(api) = &mut self.backend {
+            api.state.white = Some(white);
+            api.state.black = Some(black);
+            api.state.player0_white = player0_white;
+            api.state.turn = turn;
+        }
+    }
+
+    pub fn apply_turn(&mut self, turn: Turn) {
+        if let ChessBackend::OnlineInGame(api) = &mut self.backend {
+            api.state.turn = turn;
+        }
+    }
 }

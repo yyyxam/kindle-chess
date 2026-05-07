@@ -113,14 +113,24 @@ pub struct ChessGameScreen {
     pub app: ChessApp,
     pub board: BoardWidget,
     pub sidebar: SidebarWidget,
+    // First-render guard: kick the game-state stream task exactly once.
+    pub stream_started: bool,
 }
 
 impl ChessGameScreen {
     pub fn new(app: ChessApp) -> Self {
+        // Seed the sidebar with the initial turn from `attach_game` so the
+        // sidebar shows "Your turn" / "Waiting…" immediately, before the
+        // game-state stream catches up.
+        let mut sidebar = SidebarWidget::new(Rectangle::new(0, 1072, 1072, 376));
+        if let Some(turn) = app.turn() {
+            sidebar.set_turn(turn.clone());
+        }
         Self {
-            app: app,
+            app,
             board: BoardWidget::new(Rectangle::new(0, 0, 1072, 1072)),
-            sidebar: SidebarWidget::new(Rectangle::new(0, 1072, 1072, 376)),
+            sidebar,
+            stream_started: false,
         }
     }
 }
@@ -142,12 +152,16 @@ pub struct OngoingChessGamesScreen {
     pub games: Option<Arc<GameDataList>>,
     pub error: Option<String>,
     pub loading: bool,
+
+    // Pagination: 4 game buttons per page. Labels are baked into the buttons by
+    // `set_page` (called on initial load and on next/prev taps), so `render`
+    // doesn't recompute labels every frame.
+    pub page_index: usize,
 }
 
 impl OngoingChessGamesScreen {
     pub fn new(app: ChessApp) -> Self {
         // Layout: 1072 × 1448 total canvas
-        // Place the chess button centred in the upper half.
         const BTN_W: u16 = 800;
         const BTN_H: u16 = 120;
         const CENTER_X: i16 = 1072 / 2; // 336
@@ -221,6 +235,7 @@ impl OngoingChessGamesScreen {
             games: None,
             error: None,
             loading: false,
+            page_index: 0,
         }
     }
 }

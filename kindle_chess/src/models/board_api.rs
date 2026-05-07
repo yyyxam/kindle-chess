@@ -7,15 +7,36 @@ use crate::models::{
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BOARD ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct BoardAPI {
-    pub token: TokenInfo,
-    pub user: LichessUser, // =
-    pub game_id: Option<String>,
+// Typestate marker: authed but no game scoped. `move_piece` / `resign_game` /
+// `abort_game` / `stream_game_event` are not in scope here — they're only
+// implemented on `BoardAPI<InGame>`, so the compiler refuses to call them.
+#[derive(Debug, Clone)]
+pub struct Idle;
+
+// Typestate marker: a specific game is scoped. Holds runtime fields that only
+// exist once a game is active. `turn` is dynamic and flips on every stream
+// state event — the sidebar reads it to render "Your turn" / "Waiting".
+#[derive(Debug, Clone)]
+pub struct InGame {
+    pub game_id: String,
     pub white: Option<PlayedBy>,
     pub black: Option<PlayedBy>,
-    pub player0_white: bool, // if true then player0 had first turn
-    pub player0_turn: bool,  // if true then it's currently player0's turn
+    pub player0_white: bool,
+    pub turn: Turn,
+}
+
+#[derive(Debug, Clone)]
+pub enum Turn {
+    Playing,
+    Waiting,
+    Over { winner: Option<String> },
+}
+
+#[derive(Debug, Clone)]
+pub struct BoardAPI<S> {
+    pub token: TokenInfo,
+    pub user: LichessUser,
+    pub state: S,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

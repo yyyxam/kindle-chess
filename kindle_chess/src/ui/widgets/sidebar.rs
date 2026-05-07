@@ -1,26 +1,59 @@
+use crate::models::board_api::Turn;
 use crate::ui::events::{AppEvent, Rectangle, RectangleExt, TouchEvent, TouchKind};
 use crate::ui::renderer::{DrawColor, Renderer};
+use crate::ui::widgets::Button;
 use log::info;
 
 pub struct SidebarWidget {
     area: Rectangle,
-    menu_button: Rectangle,
-    exit_button: Rectangle,
+    menu_button: Button,
+    back_button: Button,
     event_count: u32,
+    // Driven by `set_turn` from the game-state stream events arriving on
+    // ChessGameScreen. Read by `render` to draw the status line.
+    turn_status: String,
 }
 
 impl SidebarWidget {
     pub fn new(area: Rectangle) -> Self {
+        let button_width = 200 as i16;
+        let button_height = 75 as i16;
         Self {
             area,
-            menu_button: Rectangle::new(area.x + 10, area.y + 10, 200, 60),
-            exit_button: Rectangle::new(area.x + 10, area.y + 280, 200, 60),
+            back_button: Button::new(
+                area.x + area.width as i16 / 2 - button_width / 2,
+                area.y + area.height as i16 - (button_height + 20),
+                button_width as u16,
+                button_height as u16,
+                "back".to_string(),
+                40.0,
+                true,
+            ),
+            menu_button: Button::new(
+                area.x + area.width as i16 / 2 - button_width / 2,
+                area.y + area.height as i16 - 2 * (button_height + 15),
+                button_width as u16,
+                button_height as u16,
+                "menu".to_string(),
+                40.0,
+                true,
+            ),
             event_count: 0,
+            turn_status: String::from("Loading…"),
         }
     }
 
     pub fn increment_event_count(&mut self) {
         self.event_count += 1;
+    }
+
+    pub fn set_turn(&mut self, turn: Turn) {
+        self.turn_status = match turn {
+            Turn::Playing => "Your turn".to_string(),
+            Turn::Waiting => "Waiting for opponent".to_string(),
+            Turn::Over { winner: Some(w) } => format!("Game over — winner: {}", w),
+            Turn::Over { winner: None } => "Game over".to_string(),
+        };
     }
 
     pub fn handle_touch(&mut self, touch: &TouchEvent) -> Option<AppEvent> {
@@ -29,14 +62,14 @@ impl SidebarWidget {
         }
 
         if touch.kind == TouchKind::Up {
-            if self.menu_button.contains(touch.x, touch.y) {
+            if self.menu_button.rect.contains(touch.x, touch.y) {
                 info!("Menu button pressed");
                 return Some(AppEvent::ShowMenu);
             }
 
-            if self.exit_button.contains(touch.x, touch.y) {
-                info!("Exit button pressed");
-                return Some(AppEvent::Quit);
+            if self.back_button.rect.contains(touch.x, touch.y) {
+                info!("Back button pressed");
+                return Some(AppEvent::ExitToMenu);
             }
         }
 
@@ -50,39 +83,16 @@ impl SidebarWidget {
         // Draw border
         renderer.draw_rectangle(self.area, DrawColor::Black, false)?;
 
-        // Draw menu button
-        renderer.draw_rectangle(self.menu_button, DrawColor::LightGray, true)?;
-        renderer.draw_rectangle(self.menu_button, DrawColor::Black, false)?;
+        // Turn status text, centred near the top of the sidebar.
+        let size_px = 32.0;
+        let (tw, _th) = renderer.measure_text(&self.turn_status, size_px);
+        let tx = self.area.x + (self.area.width as i16 - tw as i16) / 2;
+        let ty = self.area.y + 50;
+        renderer.draw_text(tx, ty, &self.turn_status, size_px, DrawColor::Black)?;
 
-        // Draw exit button with striped pattern
-        for i in 0..3 {
-            renderer.draw_rectangle(
-                Rectangle::new(
-                    self.exit_button.x,
-                    self.exit_button.y + (i * 20),
-                    self.exit_button.width,
-                    10,
-                ),
-                DrawColor::DarkGray,
-                true,
-            )?;
-        }
-        renderer.draw_rectangle(self.exit_button, DrawColor::Black, false)?;
-
-        // // Draw event counter visualization
-        // let count = (self.event_count % 10) as usize;
-        // for i in 0..count {
-        //     renderer.draw_rectangle(
-        //         Rectangle::new(
-        //             self.area.x + 10 + (i * 25) as i16,
-        //             self.area.y + 100,
-        //             20,
-        //             20,
-        //         ),
-        //         DrawColor::Black,
-        //         true,
-        //     )?;
-        // }
+        // Draw buttons
+        self.menu_button.draw(renderer)?;
+        self.back_button.draw(renderer)?;
 
         Ok(())
     }

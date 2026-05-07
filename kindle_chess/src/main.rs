@@ -22,11 +22,11 @@ use crate::models::app::App;
 #[tokio::main]
 async fn main() {
     match init_log() {
-        Ok(handle) => {
+        Ok(_handle) => {
             println!("Logger initialized successfully.");
             info!("Creating App instance..");
 
-            let app = match App::new() {
+            let _app = match App::new() {
                 Ok(app) => {
                     info!("App instance created. Starting...");
                     app.run()

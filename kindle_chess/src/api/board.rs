@@ -1,254 +1,43 @@
 use crate::api::oauth::authenticated_request;
-use crate::app::game::{get_turn_input, player0_turn};
+use crate::app::game::player0_turn;
 use crate::models::board_api::{
-    BoardAPI, GameDataList, GameStateStreamEvent, PlayedBy, StreamEvent,
+    BoardAPI, GameDataList, GameStateStreamEvent, Idle, InGame, PlayedBy, StreamEvent, Turn,
 };
 use crate::models::oauth::{HttpMethod, LichessUser, TokenInfo};
+use crate::ui::events::AppEvent;
 use futures::StreamExt;
 use log::{info, warn};
 use reqwest_streams::JsonStreamResponse;
+use std::sync::mpsc::Sender;
 
-impl BoardAPI {
-    pub async fn new(
-        // game_id: String,
-        auth: (TokenInfo, LichessUser),
-    ) -> Result<BoardAPI, Box<dyn std::error::Error>> {
-        Ok(Self {
-            token: auth.0,
-            user: auth.1,
-            // These should all get updated with the start of the game-state-stream
-            game_id: None,
-            white: None,
-            black: None,
-            player0_white: false,
-            player0_turn: false,
-        })
-    }
+// State-agnostic operations: ongoing-games list and the account event stream
+// are valid in both Idle and InGame.
+impl<S> BoardAPI<S> {
+    pub async fn get_ongoing_games(
+        &self,
+        n: u8,
+    ) -> Result<GameDataList, Box<dyn std::error::Error>> {
+        let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
+        let response = authenticated_request(url, &self.token, HttpMethod::GET).await?;
 
-    pub async fn move_piece(&self, board_move: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let game_id = match &self.game_id {
-            Some(game_id) => {
-                info!("Trying to send API call to move piece for game {}", game_id);
-                game_id
-            }
-            _ => {
-                warn!("No game_id provided for making the move");
-                "NO-GAME-ID"
-            }
-        };
-        let url = format!(
-            "{:?}/board/game/{}/move/{}",
-            env!("LICHESS_API_BASE"),
-            game_id,
-            board_move
-        );
-
-        let response = authenticated_request(url, &self.token, HttpMethod::POST)
-            .await
-            .unwrap();
-
-        if !response.status().is_success() {
-            info!("Failed to move piece");
-            return Err(format!("Failed to move piece: {}", response.status()).into());
-        } else {
-            info!("Piece moved successfully");
+        if !&response.status().is_success() {
+            return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
         }
 
-        Ok(())
+        let bytes = response.bytes().await?;
+
+        let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
+            warn!(
+                "Failed to parse JSON. Raw response: {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            warn!("Parse error: {}", e);
+            e
+        })?;
+        info!("The received and parsed data {:?}", data);
+        Ok(data)
     }
 
-    pub async fn resign_game(&self) -> Result<(), Box<dyn std::error::Error>> {
-        /*!Endpoint for resigning a game.*/
-        let game_id = match &self.game_id {
-            Some(game_id) => game_id,
-            _ => "NO-GAME-ID",
-        };
-        let url = format!("{}/board/game/{}/resign", env!("LICHESS_API_BASE"), game_id);
-
-        let response = authenticated_request(url, &self.token, HttpMethod::POST)
-            .await
-            .unwrap();
-
-        if !response.status().is_success() {
-            return Err(format!("Failed to resign game: {}", response.status()).into());
-        } else {
-            info!("Game resigned");
-        }
-
-        Ok(())
-    }
-
-    pub async fn abort_game(&self) -> Result<(), Box<dyn std::error::Error>> {
-        /*!Endpoint for aborting a game.
-         */
-        let game_id = match &self.game_id {
-            Some(game_id) => game_id,
-            _ => "NO-GAME-ID",
-        };
-        let url = format!("{}/board/game/{}/abort", env!("LICHESS_API_BASE"), game_id);
-
-        let response = authenticated_request(url, &self.token, HttpMethod::POST)
-            .await
-            .unwrap();
-
-        if !response.status().is_success() {
-            return Err(format!("Failed to abort game: {}", response.status()).into());
-        } else {
-            info!("Game aborted");
-        }
-
-        Ok(())
-    }
-
-    // BOARD-STATE-STREAM-ENDPOINT
-    pub async fn stream_game_event(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        /*!
-         * Streams ndjson-Responses.
-         * = New line = new event;
-         * Tries to parse from stream to EventTypes.
-         */
-
-        let game_id = match &self.game_id {
-            Some(game_id) => game_id,
-            _ => "NO-GAME-ID",
-        };
-        let url = format!("{}/board/game/stream/{}", env!("LICHESS_API_BASE"), game_id);
-
-        info!("Game-State-Stream started..");
-
-        let mut response = authenticated_request(url, &self.token, HttpMethod::STREAM)
-            .await?
-            .json_nl_stream::<GameStateStreamEvent>(1024);
-
-        // Process each event as it arrives
-        while let Some(result) = response.next().await {
-            match result {
-                Ok(event) => {
-                    info!("Received event: {:?}", event);
-                    // Handle the event based on its type
-                    match self.handle_game_event(event).await {
-                        Ok(_) => continue,
-                        Err(e) => {
-                            info!("Error while handling game event {e}")
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Ignore the stream ping (=empty line)
-                    if e.to_string().contains("EOF while parsing") {
-                        continue;
-                    }
-                    warn!("Error parsing event: {}", e);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub async fn handle_game_event(
-        &mut self,
-        event: GameStateStreamEvent,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        /*!
-         * Handles the given EventType. Affects board-properties -> mut board
-         */
-        match event {
-            GameStateStreamEvent::GameFull(full_game_data) => {
-                // INIT BOARD
-                // Parses first response of GameStream
-                info!("Received FullGameData");
-
-                // TODO (#21): check if game is still going on
-
-                // Check who playes white and set player-variable for the board
-                self.player0_white = match Some(&full_game_data.white)
-                    .expect("Unexpected value for field 'white' received in 'Board'")
-                {
-                    PlayedBy::User(player_info) => {
-                        if player_info.id == self.user.id {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                };
-
-                // Set PlayedBy-state on board
-                self.white = Some(full_game_data.white);
-                self.black = Some(full_game_data.black);
-
-                // TODO: Update bitboard
-                // ...
-
-                // Check if it's player0's turn
-                if player0_turn(full_game_data.state.moves, self.player0_white) {
-                    // TODO (#22): refactor this (to >Game< maybe?)
-                    // TODO: this should somehow check
-                    loop {
-                        match self.move_piece(get_turn_input().await.as_str()).await {
-                            Ok(_) => {
-                                info!("Piece was moved");
-                                break;
-                            }
-                            Err(e) => {
-                                info!("Piece could not be moved {:?}", e);
-                                continue;
-                            }
-                        }
-                    }
-                } else {
-                    info!("Opponent's turn")
-                }
-            }
-            GameStateStreamEvent::GameOver(game_state_data) => {
-                // Win condition checker
-                info!("Game is over. Winner is {}", game_state_data.winner);
-                // TODO: return some kind of flag to stop awaiting user input.
-            }
-            GameStateStreamEvent::GameState(game_state_data) => {
-                // TODO (#24): Update bit-board
-                // ...
-                // (1) -> player's turn now, await input: ..
-                // (2) -> do nothing and await next response
-
-                // Check if it's player0's turn
-
-                // (1)
-                if player0_turn(game_state_data.moves, self.player0_white) {
-                    loop {
-                        match self
-                            // If so, get input, translate it to turn
-                            .move_piece(get_turn_input().await.as_str())
-                            .await
-                        {
-                            Ok(_) => {
-                                println!("Piece was moved");
-                                break;
-                            }
-                            Err(e) => {
-                                println!("Piece could not be moved: {:?}", e);
-                                continue;
-                            }
-                        }
-                    } // Iterate over this is long as it needs to receive a success by the API
-                } else {
-                    // (2)
-                    println!("It's not your turn")
-                }
-            }
-            GameStateStreamEvent::ChatLine(_) => {
-                info!("Issa ChatlineEvent")
-            }
-            GameStateStreamEvent::OpponentGone(_) => {
-                info!("Issa OpponentGoneEvent")
-            }
-        }
-        Ok(())
-    }
-
-    //EVENT-STREAM-ENDPOINT
     pub async fn stream_event(&self) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!("{}/stream/event", env!("LICHESS_API_BASE"));
 
@@ -257,16 +46,13 @@ impl BoardAPI {
             .await?
             .json_nl_stream::<StreamEvent>(1024);
 
-        // Process each event as it arrives
         while let Some(result) = response.next().await {
             match result {
                 Ok(event) => {
                     info!("Received event: {:?}", event);
-                    // Handle the event based on its type
                     self.handle_event(event).await?;
                 }
                 Err(e) => {
-                    // Ignore the stream ping (=empty line)
                     if e.to_string().contains("EOF while parsing") {
                         continue;
                     }
@@ -280,49 +66,186 @@ impl BoardAPI {
 
     pub async fn handle_event(&self, event: StreamEvent) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            StreamEvent::GameStart(_) => {
-                info!("Issa GameStartEvent")
-            }
-            StreamEvent::GameFinish(_) => {
-                info!("Issa GameFinishEvent")
-            }
-            StreamEvent::Challenge(_) => {
-                info!("Issa ChallengeEvent")
-            }
-            StreamEvent::ChallengeDeclined(_) => {
-                info!("Issa ChallengeDeclinedEvent")
+            StreamEvent::GameStart(_) => info!("Issa GameStartEvent"),
+            StreamEvent::GameFinish(_) => info!("Issa GameFinishEvent"),
+            StreamEvent::Challenge(_) => info!("Issa ChallengeEvent"),
+            StreamEvent::ChallengeDeclined(_) => info!("Issa ChallengeDeclinedEvent"),
+        }
+        Ok(())
+    }
+}
+
+impl BoardAPI<Idle> {
+    pub fn new(token: TokenInfo, user: LichessUser) -> Self {
+        Self {
+            token,
+            user,
+            state: Idle,
+        }
+    }
+
+    /// Consume the idle API and produce an in-game one scoped to `game_id`.
+    /// `my_turn` is the snapshot from `GameData.is_my_turn` at attach time so
+    /// the sidebar can render something before the game-state stream catches up.
+    pub fn attach_game(self, game_id: String, my_turn: bool) -> BoardAPI<InGame> {
+        BoardAPI {
+            token: self.token,
+            user: self.user,
+            state: InGame {
+                game_id,
+                white: None,
+                black: None,
+                player0_white: false,
+                turn: if my_turn { Turn::Playing } else { Turn::Waiting },
+            },
+        }
+    }
+}
+
+impl BoardAPI<InGame> {
+    pub fn game_id(&self) -> &str {
+        &self.state.game_id
+    }
+
+    pub fn turn(&self) -> &Turn {
+        &self.state.turn
+    }
+
+    pub async fn move_piece(&self, board_move: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let url = format!(
+            "{}/board/game/{}/move/{}",
+            env!("LICHESS_API_BASE"),
+            self.state.game_id,
+            board_move
+        );
+        info!("Sending move {} for game {}", board_move, self.state.game_id);
+
+        let response = authenticated_request(url, &self.token, HttpMethod::POST).await?;
+
+        if !response.status().is_success() {
+            return Err(format!("Failed to move piece: {}", response.status()).into());
+        }
+        info!("Piece moved successfully");
+        Ok(())
+    }
+
+    pub async fn resign_game(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let url = format!(
+            "{}/board/game/{}/resign",
+            env!("LICHESS_API_BASE"),
+            self.state.game_id
+        );
+
+        let response = authenticated_request(url, &self.token, HttpMethod::POST).await?;
+
+        if !response.status().is_success() {
+            return Err(format!("Failed to resign game: {}", response.status()).into());
+        }
+        info!("Game resigned");
+        Ok(())
+    }
+
+    pub async fn abort_game(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let url = format!(
+            "{}/board/game/{}/abort",
+            env!("LICHESS_API_BASE"),
+            self.state.game_id
+        );
+
+        let response = authenticated_request(url, &self.token, HttpMethod::POST).await?;
+
+        if !response.status().is_success() {
+            return Err(format!("Failed to abort game: {}", response.status()).into());
+        }
+        info!("Game aborted");
+        Ok(())
+    }
+
+    /// Open the game-state stream and drive it to completion.
+    ///
+    /// This runs inside a tokio task that owns its own clone of the API, so
+    /// the local `&mut self` mutations to `self.state` are bookkeeping for
+    /// computing whose turn it is on subsequent `GameState` events — they do
+    /// **not** propagate back to the screen. Every state change the screen
+    /// cares about is shipped as an `AppEvent` through `tx`. The screen
+    /// applies those events to *its own* `ChessApp` copy.
+    pub async fn stream_game_event(
+        &mut self,
+        tx: Sender<AppEvent>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let url = format!(
+            "{}/board/game/stream/{}",
+            env!("LICHESS_API_BASE"),
+            self.state.game_id
+        );
+        info!("Game-state stream started for {}", self.state.game_id);
+
+        let mut response = authenticated_request(url, &self.token, HttpMethod::STREAM)
+            .await?
+            .json_nl_stream::<GameStateStreamEvent>(1024);
+
+        while let Some(result) = response.next().await {
+            match result {
+                Ok(event) => {
+                    info!("Received event: {:?}", event);
+                    if let Err(e) = self.handle_game_event(event, &tx).await {
+                        warn!("Error while handling game event: {e}");
+                    }
+                }
+                Err(e) => {
+                    // Ignore the stream ping (= empty line)
+                    if e.to_string().contains("EOF while parsing") {
+                        continue;
+                    }
+                    warn!("Error parsing event: {}", e);
+                }
             }
         }
         Ok(())
     }
 
-    pub async fn get_ongoing_games(
-        &self,
-        n: u8,
-    ) -> Result<GameDataList, Box<dyn std::error::Error>> {
-        /*!Endpoint for listing [n] ongoing games.
-         * n must be in [1..50].
-         * Results are ordered and chosen by 'urgency'
-         * */
-        let url = format!("{}/account/playing?nb={}", env!("LICHESS_API_BASE"), n);
-        let response = authenticated_request(url, &self.token, HttpMethod::GET).await?;
+    async fn handle_game_event(
+        &mut self,
+        event: GameStateStreamEvent,
+        tx: &Sender<AppEvent>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match event {
+            GameStateStreamEvent::GameFull(full) => {
+                let player0_white = matches!(&full.white, PlayedBy::User(p) if p.id == self.user.id);
+                let my_turn = player0_turn(full.state.moves.clone(), player0_white);
+                let turn = if my_turn { Turn::Playing } else { Turn::Waiting };
 
-        if !&response.status().is_success() {
-            return Err(format!("Failed to retrieve ongoing games: {}", &response.status()).into());
+                // Update local bookkeeping so subsequent GameState events can
+                // resolve whose-turn-it-is from `player0_white`.
+                self.state.white = Some(full.white.clone());
+                self.state.black = Some(full.black.clone());
+                self.state.player0_white = player0_white;
+                self.state.turn = turn.clone();
+
+                let _ = tx.send(AppEvent::GameFullReceived {
+                    white: full.white,
+                    black: full.black,
+                    player0_white,
+                    turn,
+                });
+            }
+            GameStateStreamEvent::GameState(state) => {
+                let my_turn = player0_turn(state.moves, self.state.player0_white);
+                let turn = if my_turn { Turn::Playing } else { Turn::Waiting };
+                self.state.turn = turn.clone();
+                let _ = tx.send(AppEvent::TurnChanged(turn));
+            }
+            GameStateStreamEvent::GameOver(over) => {
+                info!("Game is over. Winner is {}", over.winner);
+                let turn = Turn::Over {
+                    winner: Some(over.winner),
+                };
+                self.state.turn = turn.clone();
+                let _ = tx.send(AppEvent::TurnChanged(turn));
+            }
+            GameStateStreamEvent::ChatLine(_) => info!("Issa ChatlineEvent"),
+            GameStateStreamEvent::OpponentGone(_) => info!("Issa OpponentGoneEvent"),
         }
-
-        let bytes = response.bytes().await?;
-
-        let data: GameDataList = serde_json::from_slice(&bytes).map_err(|e| {
-            // Print the raw response for debugging
-            warn!(
-                "Failed to parse JSON. Raw response: {}",
-                String::from_utf8_lossy(&bytes)
-            );
-            warn!("Parse error: {}", e);
-            e
-        })?;
-        info!("The received and parsed data {:?}", data);
-        Ok(data)
+        Ok(())
     }
 }

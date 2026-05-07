@@ -4,7 +4,7 @@ use std::time::Duration;
 use x11rb::protocol::xproto;
 
 use crate::models::{
-    board_api::GameDataList,
+    board_api::{GameDataList, PlayedBy, Turn},
     chess::ChessApp,
     oauth::{LichessUser, TokenInfo},
 };
@@ -19,6 +19,17 @@ pub enum AppEvent {
     // Ongoing-games fetch
     OngoingGamesLoaded(Arc<GameDataList>),
     OngoingGamesFailed(String),
+
+    // Game-state stream → ChessGameScreen. Emitted from the spawned stream
+    // task; the screen uses them to update its own ChessApp copy and the
+    // sidebar (mutations to the task's local clone don't propagate).
+    GameFullReceived {
+        white: PlayedBy,
+        black: PlayedBy,
+        player0_white: bool,
+        turn: Turn,
+    },
+    TurnChanged(Turn),
 
     // UI Events
     Touch(TouchEvent),

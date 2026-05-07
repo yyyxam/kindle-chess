@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 
-use crate::models::board_api::BoardAPI;
+use crate::models::board_api::{BoardAPI, Idle, InGame};
 use crate::models::board_local::BoardLocal;
 use crate::ui::events::AppEvent;
 use crate::ui::renderer::Renderer;
@@ -26,8 +26,14 @@ pub struct ChessUI {
     pub tap_times: Vec<Instant>,
     pub last_tap_pos: Option<(i16, i16)>,
 }
+// Two online variants reflect the API's compile-time state. HomeScreen and
+// OngoingChessGamesScreen carry `OnlineIdle` (no game scoped). Picking an
+// ongoing game transitions to `OnlineInGame`, which is what ChessGameScreen
+// receives — that's also the only variant whose API surface exposes
+// move_piece / resign / abort / stream_game_event.
 #[derive(Debug, Clone)]
 pub enum ChessBackend {
     Offline(BoardLocal),
-    Online(BoardAPI),
+    OnlineIdle(BoardAPI<Idle>),
+    OnlineInGame(BoardAPI<InGame>),
 }
