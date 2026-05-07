@@ -59,7 +59,8 @@ export DISPLAY=:0
 lipc-set-prop com.lab126.pillow disableEnablePillow disable 2>/dev/null || true
 
 # WICHTIG: Timeout - falls das Programm hängt, automatisch beenden nach 3min
-timeout 180 $BINARY >> "$SCRIPT_LOG" 2>&1
+# timeout 180
+$BINARY >> "$SCRIPT_LOG" 2>&1
 
 EXIT_CODE=$?
 

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod bitboard;
 pub mod board_api;
 pub mod board_local;
 pub mod chess;

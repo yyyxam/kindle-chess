@@ -51,7 +51,7 @@ impl SidebarWidget {
         self.turn_status = match turn {
             Turn::Playing => "Your turn".to_string(),
             Turn::Waiting => "Waiting for opponent".to_string(),
-            Turn::Over { winner: Some(w) } => format!("Game over — winner: {}", w),
+            Turn::Over { winner: Some(w) } => format!("{} won!", w),
             Turn::Over { winner: None } => "Game over".to_string(),
         };
     }

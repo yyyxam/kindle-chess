@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::models::{
+    bitboard::Bitboards,
     game::Player,
     oauth::{LichessUser, TokenInfo},
 };
@@ -16,6 +17,11 @@ pub struct Idle;
 // Typestate marker: a specific game is scoped. Holds runtime fields that only
 // exist once a game is active. `turn` is dynamic and flips on every stream
 // state event — the sidebar reads it to render "Your turn" / "Waiting".
+//
+// `initial_board` is the position parsed from `GameFull.initial_fen`. Each
+// `GameState` event delivers the full move list from move 1, so we rebuild the
+// current `board` by cloning `initial_board` and replaying the moves — no
+// incremental state to keep in sync.
 #[derive(Debug, Clone)]
 pub struct InGame {
     pub game_id: String,
@@ -23,6 +29,8 @@ pub struct InGame {
     pub black: Option<PlayedBy>,
     pub player0_white: bool,
     pub turn: Turn,
+    pub initial_board: Bitboards,
+    pub board: Bitboards,
 }
 
 #[derive(Debug, Clone)]
@@ -253,6 +261,10 @@ pub struct GameStateEvent {
     pub wtakeback: Option<bool>,
     pub btakeback: Option<bool>,
     pub status: String,
+    // Lichess populates this on the terminal `gameState` event ("white" /
+    // "black"). Absent for draws/stalemate/abort.
+    #[serde(default)]
+    pub winner: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -314,6 +326,18 @@ pub struct Clock {
 pub enum PlayedBy {
     User(PlayedByPlayer),
     Ai(PlayedByAi),
+}
+
+impl PlayedBy {
+    pub fn display_name(&self) -> String {
+        match self {
+            PlayedBy::User(p) => p.name.clone(),
+            PlayedBy::Ai(ai) => match ai.ai_level {
+                Some(level) => format!("AI lvl {}", level),
+                None => "AI".to_string(),
+            },
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]

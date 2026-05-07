@@ -168,15 +168,30 @@ impl Screen for ChessGameScreen {
                 black,
                 player0_white,
                 turn,
+                board,
+                last_move,
             } => {
                 self.app
                     .apply_game_full(white, black, player0_white, turn.clone());
+                // Orient the board so the local player's pieces are on the
+                // bottom rank — flip when player0 is black. set_flipped is a
+                // no-op when orientation is unchanged, so re-applying on
+                // every GameFull is cheap.
+                self.board.set_flipped(!player0_white);
+                self.board.set_position(board);
+                self.board.set_last_move(last_move);
                 self.sidebar.set_turn(turn);
                 Ok(Transition::Redraw)
             }
 
-            AppEvent::TurnChanged(turn) => {
+            AppEvent::TurnChanged {
+                turn,
+                board,
+                last_move,
+            } => {
                 self.app.apply_turn(turn.clone());
+                self.board.set_position(board);
+                self.board.set_last_move(last_move);
                 self.sidebar.set_turn(turn);
                 Ok(Transition::Redraw)
             }
@@ -199,7 +214,19 @@ impl Screen for ChessGameScreen {
                     chess_move.from.to_algebraic(),
                     chess_move.to.to_algebraic(),
                 );
-                // TODO: spawn `move_piece` via `self.app.online_in_game_api()`.
+                let Some(uci) = self.board.move_to_uci(chess_move) else {
+                    warn!("MoveMade before board position loaded — dropping move");
+                    return Ok(Transition::Redraw);
+                };
+                if let Some(api) = self.app.online_in_game_api() {
+                    tokio::spawn(async move {
+                        if let Err(e) = api.move_piece(&uci).await {
+                            warn!("move_piece({}) failed: {}", uci, e);
+                        }
+                    });
+                } else {
+                    warn!("MoveMade with no online in-game backend — ignored");
+                }
                 Ok(Transition::Redraw)
             }
 

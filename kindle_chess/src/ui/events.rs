@@ -4,6 +4,7 @@ use std::time::Duration;
 use x11rb::protocol::xproto;
 
 use crate::models::{
+    bitboard::Bitboards,
     board_api::{GameDataList, PlayedBy, Turn},
     chess::ChessApp,
     oauth::{LichessUser, TokenInfo},
@@ -21,15 +22,29 @@ pub enum AppEvent {
     OngoingGamesFailed(String),
 
     // Game-state stream → ChessGameScreen. Emitted from the spawned stream
-    // task; the screen uses them to update its own ChessApp copy and the
-    // sidebar (mutations to the task's local clone don't propagate).
+    // task; the screen uses them to update its own ChessApp copy, the board
+    // widget, and the sidebar (mutations to the task's local clone don't
+    // propagate). `board` is the position derived from `initial_fen` + the
+    // event's full move list — the screen replaces the widget's bitboard
+    // wholesale on every update.
     GameFullReceived {
         white: PlayedBy,
         black: PlayedBy,
         player0_white: bool,
         turn: Turn,
+        board: Bitboards,
+        // Bitmask of squares affected by the last UCI move in the stream's
+        // move list (from + to, plus the rook squares for a castle, plus any
+        // captured-pawn square for en passant). 0 when there is no last move
+        // (fresh game). Drives the board widget's last-move corner-bracket
+        // highlight.
+        last_move: u64,
     },
-    TurnChanged(Turn),
+    TurnChanged {
+        turn: Turn,
+        board: Bitboards,
+        last_move: u64,
+    },
 
     // UI Events
     Touch(TouchEvent),

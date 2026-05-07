@@ -1,6 +1,6 @@
 use crate::ui::events::RectangleExt;
 use fontdue::{Font, FontSettings};
-use image::{ImageBuffer, Luma, imageops};
+use image::{ImageBuffer, Luma, Rgba, imageops};
 use log::info;
 use std::collections::HashMap;
 use std::sync::Arc as StdArc;
@@ -160,6 +160,11 @@ impl Renderer {
         Ok(())
     }
 
+    /// Draw a line segment at thickness `width`. `width` of 0 or 1 uses the
+    /// server's default thin-line algorithm (1 px). Anything ≥ 2 temporarily
+    /// changes the GC's `line_width` to draw the segment, then resets it back
+    /// to 0 — leaking a non-zero width would make subsequent unfilled
+    /// rectangles draw thick borders too.
     pub fn draw_line(
         &mut self,
         x1: i16,
@@ -167,11 +172,19 @@ impl Renderer {
         x2: i16,
         y2: i16,
         color: DrawColor,
+        width: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let gc = self.gcs[&color];
 
+        if width >= 2 {
+            self.conn
+                .change_gc(gc, &ChangeGCAux::new().line_width(width as u32))?;
+        }
         self.conn
             .poly_segment(self.window, gc, &[Segment { x1, y1, x2, y2 }])?;
+        if width >= 2 {
+            self.conn.change_gc(gc, &ChangeGCAux::new().line_width(0))?;
+        }
 
         self.dirty = true;
         Ok(())
@@ -245,6 +258,43 @@ impl Renderer {
 
         self.dirty = true;
         Ok(())
+    }
+
+    /// Composite an RGBA image onto a solid `background` color and dispatch
+    /// via the regular grayscale `draw_image` path. Pixels are converted to
+    /// luminance (BT.601 weights), then alpha-blended over the background so
+    /// transparent PNG areas pick up the underlying square color. Used for
+    /// piece sprites — they're 8-bit RGBA with a transparent background, and
+    /// the e-ink panel only renders luma anyway.
+    pub fn draw_image_alpha(
+        &mut self,
+        x: i16,
+        y: i16,
+        width: u16,
+        height: u16,
+        img: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+        background: DrawColor,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use image::imageops::FilterType;
+
+        let bg = color_to_luma(background) as u32;
+        let scaled = imageops::resize(img, width as u32, height as u32, FilterType::Triangle);
+
+        let mut composited: ImageBuffer<Luma<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(width as u32, height as u32, Luma([bg as u8]));
+
+        for (px, py, pixel) in scaled.enumerate_pixels() {
+            let [r, g, b, a] = pixel.0;
+            if a == 0 {
+                continue;
+            }
+            let luma = (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000;
+            let alpha = a as u32;
+            let blended = (luma * alpha + bg * (255 - alpha)) / 255;
+            composited.put_pixel(px, py, Luma([blended as u8]));
+        }
+
+        self.draw_image(x, y, width, height, &composited)
     }
 
     /// Returns the bounding-box size of `text` rendered at `size_px`, matching
