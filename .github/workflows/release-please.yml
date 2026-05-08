@@ -1,0 +1,33 @@
+name: Release Please
+
+# On every push to main, release-please scans Conventional-Commit messages
+# since the last release tag and either:
+#   - opens / updates a "release PR" that bumps kindle_chess/Cargo.toml +
+#     CHANGELOG.md, or
+#   - if such a PR was just merged, pushes the matching v* tag and creates
+#     the GitHub release. That tag push is what fires release.yml, which
+#     cross-builds and uploads the binary + sha256.
+#
+# Trigger gotcha: GitHub deliberately suppresses workflow chaining when one
+# workflow's push is signed with the default GITHUB_TOKEN — release.yml would
+# never see the tag. To break the chain, release-please uses a PAT
+# (RELEASE_PLEASE_TOKEN, classic with `repo` + `workflow` scopes), so the tag
+# push is attributed to a real user identity and downstream workflows run.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
