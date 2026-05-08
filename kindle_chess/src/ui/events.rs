@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use x11rb::protocol::xproto;
 
+use crate::api::github::UpdateInfo;
 use crate::models::{
     bitboard::Bitboards,
     board_api::{GameDataList, PlayedBy, Turn},
@@ -20,6 +21,17 @@ pub enum AppEvent {
     // Ongoing-games fetch
     OngoingGamesLoaded(Arc<GameDataList>),
     OngoingGamesFailed(String),
+
+    // Update flow → UpdateScreen.
+    // - Available: a strictly newer release was found, with verified asset metadata.
+    // - UpToDate:  GitHub responded but no newer release exists.
+    // - CheckFailed: the GitHub query itself errored (network, parse, rate limit).
+    // - Applied / ApplyFailed: result of the download+verify+swap apply path.
+    UpdateAvailable(UpdateInfo),
+    UpdateUpToDate,
+    UpdateCheckFailed(String),
+    UpdateApplied,
+    UpdateApplyFailed(String),
 
     // Game-state stream → ChessGameScreen. Emitted from the spawned stream
     // task; the screen uses them to update its own ChessApp copy, the board

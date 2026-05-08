@@ -10,12 +10,15 @@ use log4rs::encode::pattern::PatternEncoder;
 pub mod api {
     pub mod api;
     pub mod board;
+    pub mod github;
     pub mod oauth;
+    pub mod update;
 }
 pub mod app;
 pub mod local;
 pub mod models;
 pub mod ui;
+pub mod version;
 
 use crate::models::app::App;
 
@@ -24,6 +27,7 @@ async fn main() {
     match init_log() {
         Ok(_handle) => {
             println!("Logger initialized successfully.");
+            info!("kindle-hello {}", version::full());
             info!("Creating App instance..");
 
             let _app = match App::new() {

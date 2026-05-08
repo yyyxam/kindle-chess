@@ -10,6 +10,7 @@ use std::{
 use image::{ImageBuffer, Luma};
 
 use crate::{
+    api::github::UpdateInfo,
     models::{board_api::GameDataList, chess::ChessApp},
     ui::{
         events::{AppEvent, Rectangle, RectangleExt},
@@ -62,13 +63,14 @@ pub enum Transition {
 pub struct HomeScreen {
     pub chess_button: Button,
     pub ongoing_games_button: Button,
-    // pub game_of_ur_button: Button,
-    // pub settings_button: Button,
+    pub settings_button: Button,
 
     // Auth bootstrap state. `auth_started` flips to true on the first render so
-    // we kick the token check exactly once. Buttons stay inert until `app` is
-    // populated — either by the bootstrap (token already valid) or by a
-    // ChessReady event bubbling up from a popped ChessAuthScreen.
+    // we kick the token check exactly once. The chess/ongoing-games buttons
+    // stay inert until `app` is populated — either by the bootstrap (token
+    // already valid) or by a ChessReady event bubbling up from a popped
+    // ChessAuthScreen. The settings button is always live: an offline user
+    // still needs to be able to update.
     pub app: Option<ChessApp>,
     pub auth_started: bool,
 }
@@ -99,6 +101,15 @@ impl HomeScreen {
                 BTN_H,
                 String::from("Ongoing Games"),
                 45.0,
+                true,
+            ),
+            settings_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y + 10 + BTN_H as i16 + BTN_H as i16 + 20,
+                BTN_W,
+                BTN_H - 20,
+                String::from("Settings"),
+                40.0,
                 true,
             ),
             app: None,
@@ -263,9 +274,96 @@ impl ChessAuthScreen {
     }
 }
 
-// ─── ChessSettingsScreen ──────────────────────────────────────────────────────
+// ─── SettingsScreen ───────────────────────────────────────────────────────────
+// App-level settings landing page. Currently hosts only the "Check for updates"
+// entry point, but is a natural home for future toggles (telemetry, board
+// orientation, etc.) without further restructuring HomeScreen.
 
-pub struct ChessSettingsScreen {
-    pub option_button: Rectangle,
-    pub back_button: Rectangle,
+pub struct SettingsScreen {
+    pub check_update_button: Button,
+    pub back_button: Button,
+}
+
+impl SettingsScreen {
+    pub fn new() -> Self {
+        const BTN_W: u16 = 600;
+        const BTN_H: u16 = 120;
+        const CENTER_X: i16 = 1072 / 2;
+        const CENTER_Y: i16 = 1448 / 2;
+        Self {
+            check_update_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y - BTN_H as i16 / 2,
+                BTN_W,
+                BTN_H,
+                String::from("Check for updates"),
+                40.0,
+                true,
+            ),
+            back_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y * 2 - (BTN_H as i16 - 20) - 32,
+                BTN_W,
+                BTN_H - 20,
+                String::from("back"),
+                40.0,
+                true,
+            ),
+        }
+    }
+}
+
+// ─── UpdateScreen ─────────────────────────────────────────────────────────────
+// Drives the check → (up-to-date | available → apply → applied | failed) state
+// machine. The check is kicked off automatically on first render; the Apply
+// button is only live while `state` is `Available`. Once `Applied`, the action
+// button doubles as a Quit affordance — KUAL relaunches the app on next tap of
+// the menu entry, picking up the new binary.
+
+pub enum UpdateState {
+    Checking,
+    UpToDate,
+    Available(UpdateInfo),
+    Downloading,
+    Applied,
+    Failed(String),
+}
+
+pub struct UpdateScreen {
+    pub state: UpdateState,
+    pub action_button: Button,
+    pub back_button: Button,
+    // First-render flag: kick the check exactly once.
+    pub check_started: bool,
+}
+
+impl UpdateScreen {
+    pub fn new() -> Self {
+        const BTN_W: u16 = 600;
+        const BTN_H: u16 = 120;
+        const CENTER_X: i16 = 1072 / 2;
+        const CENTER_Y: i16 = 1448 / 2;
+        Self {
+            state: UpdateState::Checking,
+            action_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y + BTN_H as i16,
+                BTN_W,
+                BTN_H,
+                String::from("…"),
+                40.0,
+                true,
+            ),
+            back_button: Button::new(
+                CENTER_X - BTN_W as i16 / 2,
+                CENTER_Y * 2 - (BTN_H as i16 - 20) - 32,
+                BTN_W,
+                BTN_H - 20,
+                String::from("back"),
+                40.0,
+                true,
+            ),
+            check_started: false,
+        }
+    }
 }

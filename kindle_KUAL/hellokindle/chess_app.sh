@@ -44,6 +44,21 @@ if [ -f "$PID_FILE" ]; then
     rm -f "$PID_FILE"
 fi
 
+# ─── Update trampoline ────────────────────────────────────────────────────────
+# The in-app updater stages a verified new binary at $BINARY.new (it does not
+# replace the running ELF directly because /mnt/us is VFAT). At launch time —
+# while no instance is running — we move it into place. If the swap fails,
+# leave the existing binary untouched and continue.
+if [ -f "$BINARY.new" ]; then
+    echo "Update staged at $BINARY.new — installing" >> "$SCRIPT_LOG"
+    if mv "$BINARY.new" "$BINARY"; then
+        chmod +x "$BINARY"
+        echo "Update installed" >> "$SCRIPT_LOG"
+    else
+        echo "WARNING: failed to install $BINARY.new — keeping current binary" >> "$SCRIPT_LOG"
+    fi
+fi
+
 
 # AB HIER FRANKENSTEINED
 

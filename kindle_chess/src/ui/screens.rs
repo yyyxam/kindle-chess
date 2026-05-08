@@ -3,13 +3,17 @@ use std::sync::Arc;
 use log::{debug, info, warn};
 
 use crate::{
-    api::oauth::{authenticate, get_user_info, load_token},
+    api::{
+        github::{check_for_update, UpdateInfo},
+        oauth::{authenticate, get_user_info, load_token},
+        update::apply_update,
+    },
     models::{
         board_api::PlayedBy,
         chess::ChessApp,
         ui::{
             ChessAuthScreen, ChessGameScreen, Display, HomeScreen, OngoingChessGamesScreen, Screen,
-            Transition,
+            SettingsScreen, Transition, UpdateScreen, UpdateState,
         },
     },
     ui::{
@@ -17,6 +21,7 @@ use crate::{
         renderer::DrawColor,
         widgets::Button,
     },
+    version,
 };
 use std::sync::mpsc::Sender;
 
@@ -35,6 +40,7 @@ impl Screen for HomeScreen {
         display.renderer.clear(DrawColor::White)?;
         self.chess_button.draw(&mut display.renderer)?;
         self.ongoing_games_button.draw(&mut display.renderer)?;
+        self.settings_button.draw(&mut display.renderer)?;
 
         display.renderer.present()?;
         Ok(())
@@ -63,6 +69,13 @@ impl Screen for HomeScreen {
 
             AppEvent::Touch(touch) => {
                 if touch.kind == TouchKind::Up {
+                    // Settings is reachable regardless of auth state — an
+                    // offline user still needs the update entry point.
+                    if self.settings_button.rect.contains(touch.x, touch.y) {
+                        info!("Settings button pressed");
+                        return Ok(Transition::Push(Box::new(SettingsScreen::new())));
+                    }
+
                     let Some(app) = self.app.clone() else {
                         info!("Button tap ignored — auth not yet complete");
                         return Ok(Transition::Stay);
@@ -588,4 +601,251 @@ impl Screen for OngoingChessGamesScreen {
             _ => Ok(Transition::Stay),
         }
     }
+}
+
+// ─── SettingsScreen ───────────────────────────────────────────────────────────
+
+impl Screen for SettingsScreen {
+    fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
+        display.renderer.clear(DrawColor::White)?;
+
+        // Title
+        let title = "Settings";
+        let title_size = 56.0;
+        let (tw, _) = display.renderer.measure_text(title, title_size);
+        display
+            .renderer
+            .draw_text((1072 - tw as i16) / 2, 120, title, title_size, DrawColor::Black)?;
+
+        // Version block
+        let info_size = 28.0;
+        let lines = [
+            format!("Version:  {}", version::VERSION),
+            format!("Commit:   {}", version::GIT_SHA),
+            format!("Built:    {}", version::BUILD_TIMESTAMP),
+        ];
+        let mut y: i16 = 240;
+        for line in &lines {
+            display
+                .renderer
+                .draw_text(120, y, line, info_size, DrawColor::Black)?;
+            y += 40;
+        }
+
+        self.check_update_button.draw(&mut display.renderer)?;
+        self.back_button.draw(&mut display.renderer)?;
+        display.renderer.present()?;
+        Ok(())
+    }
+
+    fn handle_event(
+        &mut self,
+        event: AppEvent,
+        _display: &mut Display,
+    ) -> Result<Transition, Box<dyn std::error::Error>> {
+        match event {
+            AppEvent::Touch(touch) => {
+                if touch.kind != TouchKind::Up {
+                    return Ok(Transition::Stay);
+                }
+                if self.check_update_button.rect.contains(touch.x, touch.y) {
+                    info!("Check-for-updates pressed");
+                    return Ok(Transition::Push(Box::new(UpdateScreen::new())));
+                }
+                if self.back_button.rect.contains(touch.x, touch.y) {
+                    return Ok(Transition::Pop);
+                }
+                Ok(Transition::Stay)
+            }
+            AppEvent::Expose => Ok(Transition::Redraw),
+            AppEvent::WindowUnmapped => {
+                warn!("Window unmapped!");
+                Ok(Transition::Stay)
+            }
+            AppEvent::Quit => Ok(Transition::Quit),
+            _ => Ok(Transition::Stay),
+        }
+    }
+}
+
+// ─── UpdateScreen ─────────────────────────────────────────────────────────────
+
+impl Screen for UpdateScreen {
+    fn render(&mut self, display: &mut Display) -> Result<(), Box<dyn std::error::Error>> {
+        // Auto-kick the check on first paint.
+        if !self.check_started {
+            self.check_started = true;
+            kick_update_check(display.event_tx.clone());
+        }
+
+        display.renderer.clear(DrawColor::White)?;
+
+        // Title
+        let title = "Update";
+        let title_size = 56.0;
+        let (tw, _) = display.renderer.measure_text(title, title_size);
+        display
+            .renderer
+            .draw_text((1072 - tw as i16) / 2, 120, title, title_size, DrawColor::Black)?;
+
+        // State-driven body. The action button is only drawn (and only live in
+        // the touch handler) when there is something meaningful to do.
+        let (lines, action_label, action_visible) = match &self.state {
+            UpdateState::Checking => (
+                vec!["Checking for updates…".to_string()],
+                "Apply",
+                false,
+            ),
+            UpdateState::UpToDate => (
+                vec![format!("You're up to date — v{}", version::VERSION)],
+                "Apply",
+                false,
+            ),
+            UpdateState::Available(info) => (
+                vec![
+                    format!("Update available: v{} → v{}", info.current, info.latest),
+                    format!("({} bytes)", info.asset_size),
+                    String::new(),
+                    info.release_name.clone(),
+                ],
+                "Apply",
+                true,
+            ),
+            UpdateState::Downloading => (
+                vec!["Downloading and verifying…".to_string()],
+                "Apply",
+                false,
+            ),
+            UpdateState::Applied => (
+                vec![
+                    "Update applied.".to_string(),
+                    "Quit and relaunch from the KUAL menu.".to_string(),
+                ],
+                "Quit",
+                true,
+            ),
+            UpdateState::Failed(err) => (
+                vec!["Update failed:".to_string(), err.clone()],
+                "Apply",
+                false,
+            ),
+        };
+
+        let info_size = 28.0;
+        let mut y: i16 = 280;
+        for line in &lines {
+            let (lw, _) = display.renderer.measure_text(line, info_size);
+            let lx = (1072 - lw as i16) / 2;
+            display
+                .renderer
+                .draw_text(lx, y, line, info_size, DrawColor::Black)?;
+            y += 40;
+        }
+
+        if action_visible {
+            self.action_button.label = action_label.to_string();
+            self.action_button.draw(&mut display.renderer)?;
+        }
+        self.back_button.draw(&mut display.renderer)?;
+
+        display.renderer.present()?;
+        Ok(())
+    }
+
+    fn handle_event(
+        &mut self,
+        event: AppEvent,
+        display: &mut Display,
+    ) -> Result<Transition, Box<dyn std::error::Error>> {
+        match event {
+            AppEvent::UpdateAvailable(info) => {
+                info!("Update available: v{} → v{}", info.current, info.latest);
+                self.state = UpdateState::Available(info);
+                Ok(Transition::Redraw)
+            }
+            AppEvent::UpdateUpToDate => {
+                self.state = UpdateState::UpToDate;
+                Ok(Transition::Redraw)
+            }
+            AppEvent::UpdateCheckFailed(e) => {
+                warn!("Update check failed: {}", e);
+                self.state = UpdateState::Failed(format!("Check failed: {}", e));
+                Ok(Transition::Redraw)
+            }
+            AppEvent::UpdateApplied => {
+                info!("Update applied");
+                self.state = UpdateState::Applied;
+                Ok(Transition::Redraw)
+            }
+            AppEvent::UpdateApplyFailed(e) => {
+                warn!("Update apply failed: {}", e);
+                self.state = UpdateState::Failed(format!("Apply failed: {}", e));
+                Ok(Transition::Redraw)
+            }
+
+            AppEvent::Touch(touch) => {
+                if touch.kind != TouchKind::Up {
+                    return Ok(Transition::Stay);
+                }
+                if self.back_button.rect.contains(touch.x, touch.y) {
+                    return Ok(Transition::Pop);
+                }
+                if self.action_button.rect.contains(touch.x, touch.y) {
+                    match &self.state {
+                        UpdateState::Available(info) => {
+                            let info = info.clone();
+                            self.state = UpdateState::Downloading;
+                            kick_update_apply(info, display.event_tx.clone());
+                            return Ok(Transition::Redraw);
+                        }
+                        UpdateState::Applied => {
+                            // KUAL will relaunch the binary the next time the
+                            // user taps the menu entry — and exec(2) picks up
+                            // the new file at the path we just renamed onto.
+                            return Ok(Transition::Quit);
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Transition::Stay)
+            }
+
+            AppEvent::Expose => Ok(Transition::Redraw),
+            AppEvent::WindowUnmapped => {
+                warn!("Window unmapped!");
+                Ok(Transition::Stay)
+            }
+            AppEvent::Quit => Ok(Transition::Quit),
+            _ => Ok(Transition::Stay),
+        }
+    }
+}
+
+fn kick_update_check(tx: Sender<AppEvent>) {
+    tokio::spawn(async move {
+        match check_for_update().await {
+            Ok(Some(info)) => {
+                let _ = tx.send(AppEvent::UpdateAvailable(info));
+            }
+            Ok(None) => {
+                let _ = tx.send(AppEvent::UpdateUpToDate);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::UpdateCheckFailed(e.to_string()));
+            }
+        }
+    });
+}
+
+fn kick_update_apply(info: UpdateInfo, tx: Sender<AppEvent>) {
+    tokio::spawn(async move {
+        match apply_update(&info).await {
+            Ok(()) => {
+                let _ = tx.send(AppEvent::UpdateApplied);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::UpdateApplyFailed(e.to_string()));
+            }
+        }
+    });
 }
