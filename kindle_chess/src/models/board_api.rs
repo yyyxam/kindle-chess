@@ -1,21 +1,50 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::models::{
+    bitboard::Bitboards,
     game::Player,
     oauth::{LichessUser, TokenInfo},
 };
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ BOARD ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BoardAPI {
-    pub token: TokenInfo,
-    pub user: LichessUser, // =
+// Typestate marker: authed but no game scoped. `move_piece` / `resign_game` /
+// `abort_game` / `stream_game_event` are not in scope here — they're only
+// implemented on `BoardAPI<InGame>`, so the compiler refuses to call them.
+#[derive(Debug, Clone)]
+pub struct Idle;
+
+// Typestate marker: a specific game is scoped. Holds runtime fields that only
+// exist once a game is active. `turn` is dynamic and flips on every stream
+// state event — the sidebar reads it to render "Your turn" / "Waiting".
+//
+// `initial_board` is the position parsed from `GameFull.initial_fen`. Each
+// `GameState` event delivers the full move list from move 1, so we rebuild the
+// current `board` by cloning `initial_board` and replaying the moves — no
+// incremental state to keep in sync.
+#[derive(Debug, Clone)]
+pub struct InGame {
     pub game_id: String,
     pub white: Option<PlayedBy>,
     pub black: Option<PlayedBy>,
-    pub player0_white: bool, // if true then player0 had first turn
-    pub player0_turn: bool,  // if true then it's currently player0's turn
+    pub player0_white: bool,
+    pub turn: Turn,
+    pub initial_board: Bitboards,
+    pub board: Bitboards,
+}
+
+#[derive(Debug, Clone)]
+pub enum Turn {
+    Playing,
+    Waiting,
+    Over { winner: Option<String> },
+}
+
+#[derive(Debug, Clone)]
+pub struct BoardAPI<S> {
+    pub token: TokenInfo,
+    pub user: LichessUser,
+    pub state: S,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -232,6 +261,10 @@ pub struct GameStateEvent {
     pub wtakeback: Option<bool>,
     pub btakeback: Option<bool>,
     pub status: String,
+    // Lichess populates this on the terminal `gameState` event ("white" /
+    // "black"). Absent for draws/stalemate/abort.
+    #[serde(default)]
+    pub winner: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -289,15 +322,25 @@ pub struct Clock {
     increment: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Serialize, Clone)]
 pub enum PlayedBy {
     User(PlayedByPlayer),
     Ai(PlayedByAi),
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+impl PlayedBy {
+    pub fn display_name(&self) -> String {
+        match self {
+            PlayedBy::User(p) => p.name.clone(),
+            PlayedBy::Ai(ai) => match ai.ai_level {
+                Some(level) => format!("AI lvl {}", level),
+                None => "AI".to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct PlayedByPlayer {
     pub id: String,
     pub name: String,
@@ -305,10 +348,48 @@ pub struct PlayedByPlayer {
     pub rating: u64,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct PlayedByAi {
     #[serde(rename = "aiLevel")]
     pub ai_level: Option<u8>,
+}
+
+// Lichess sends two different opponent shapes:
+//   GET /api/account/playing  → {id, username, rating, ai}     (ai = level or null)
+//   game-state stream         → {id, name, title, rating}      or {aiLevel}
+// Untagged + try-User-first failed for now_playing because `name` was missing,
+// so every opponent fell through to the all-Optional Ai variant. This proxy
+// accepts both schemas and discriminates on whether an ai-level field is set.
+#[derive(Deserialize)]
+struct PlayedByRaw {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default, alias = "username")]
+    name: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    rating: Option<u64>,
+    #[serde(default, rename = "aiLevel", alias = "ai")]
+    ai_level: Option<u8>,
+}
+
+impl<'de> Deserialize<'de> for PlayedBy {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = PlayedByRaw::deserialize(d)?;
+        if let Some(level) = raw.ai_level {
+            Ok(PlayedBy::Ai(PlayedByAi {
+                ai_level: Some(level),
+            }))
+        } else {
+            Ok(PlayedBy::User(PlayedByPlayer {
+                id: raw.id.unwrap_or_default(),
+                name: raw.name.unwrap_or_default(),
+                title: raw.title,
+                rating: raw.rating.unwrap_or(0),
+            }))
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

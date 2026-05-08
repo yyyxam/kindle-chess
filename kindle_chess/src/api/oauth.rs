@@ -1,5 +1,8 @@
-use crate::models::oauth::{
-    AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
+use crate::{
+    models::oauth::{
+        AuthCallbackQuery, AuthConfig, AuthState, HttpMethod, LichessUser, OAuth2Client, TokenInfo,
+    },
+    ui::events::AppEvent,
 };
 use axum::{
     Router,
@@ -8,6 +11,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
+use image::{ImageBuffer, Luma};
 use log::info;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, EndpointNotSet,
@@ -16,7 +20,10 @@ use oauth2::{
     StandardTokenResponse, TokenResponse, TokenUrl,
     basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
 };
-use qrcode::{QrCode, render::unicode};
+use qrcode::{
+    QrCode,
+    // render::{Pixel, Renderer},
+};
 use reqwest::ClientBuilder;
 use std::sync::Arc;
 use tokio::sync::{Mutex, oneshot};
@@ -337,15 +344,22 @@ async fn root_handler() -> Html<String> {
     )
 }
 
-pub fn generate_qr_code(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    /*! Generate qr code redirecting to authentication site */
+pub fn generate_qr_code(
+    url: &str,
+) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>, Box<dyn std::error::Error>> {
     let code = QrCode::new(url)?;
-    let image = code
-        .render::<unicode::Dense1x2>()
-        .dark_color(unicode::Dense1x2::Light)
-        .light_color(unicode::Dense1x2::Dark)
-        .build();
+    let image = code.render::<Luma<u8>>().build();
+
     Ok(image)
+}
+
+pub async fn start_auth(
+    oauth_client: Arc<OAuth2Client>,
+) -> Result<(AuthState, ImageBuffer<Luma<u8>, Vec<u8>>), Box<dyn std::error::Error + Send + Sync>> {
+    let auth_state = oauth_client.start_auth_flow().await.unwrap();
+    info!("Auth URL: {}", auth_state.auth_url);
+    let qr = generate_qr_code(&auth_state.auth_url).unwrap();
+    Ok((auth_state, qr))
 }
 
 pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::error::Error>> {
@@ -365,83 +379,53 @@ pub async fn get_user_info(token: &str) -> Result<LichessUser, Box<dyn std::erro
     Ok(user)
 }
 
-pub async fn authenticate() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
+pub async fn authenticate(
+    tx: std::sync::mpsc::Sender<crate::ui::events::AppEvent>,
+) -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
     /*! Starts authentication flow */
     let config = AuthConfig::default();
     let oauth_client = Arc::new(OAuth2Client::new(config)?);
 
-    // Start auth flow
-    let auth_state = oauth_client.start_auth_flow().await?;
+    let (_auth_state, qr) = start_auth(oauth_client.clone())
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    info!("Starting OAuth2 authentication flow...");
-    info!("Please visit the following URL to authenticate:");
-    info!("{}", auth_state.auth_url);
+    let _ = tx.send(AppEvent::QrReady(qr));
 
-    // Generate QR code for mobile authentication
-    match generate_qr_code(&auth_state.auth_url) {
-        Ok(qr) => {
-            info!("Or scan this QR code with your mobile device:");
-            info!("\n{}", qr);
-        }
-        Err(e) => {
-            info!("Could not generate QR code: {}", e);
-        }
-    }
-
-    // Start callback server and wait for auth
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<TokenInfo>();
     let token = run_auth_server(oauth_client.clone(), shutdown_rx).await?;
-
-    // Notify shutdown
     let _ = shutdown_tx.send(token.clone());
 
-    // Get user info
     let user = get_user_info(&token.access_token).await?;
-    info!("Successfully re-authenticated as: {}", user.username);
+    info!("Successfully (re-)authenticated as: {}", user.username);
 
-    // Write TokenInfo to token.json-File
     match write(env!("AUTH_TOKEN"), serde_json::to_string_pretty(&token)?) {
-        Ok(()) => {
-            info!("Auth-Token written to  {}", env!("AUTH_TOKEN"))
-        }
-        Err(e) => {
-            info!("Error writing AuthToken: {}", e)
-        }
+        Ok(()) => info!("Auth-Token written to {}", env!("AUTH_TOKEN")),
+        Err(e) => info!("Error writing AuthToken: {}", e),
     }
 
     Ok((token, user))
 }
 
-pub async fn load_token() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    /*! Loads auth-topken from disk */
-    let mut file = File::open(std::path::Path::new(env!("AUTH_TOKEN")))?;
+pub fn load_token() -> Result<Option<TokenInfo>, Box<dyn std::error::Error>> {
+    /*! Loads auth-token from disk */
+    let path = std::path::Path::new(env!("AUTH_TOKEN"));
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let mut file = File::open(path)?;
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
-    let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
-    let user = get_user_info(&token_info.access_token).await?;
-    info!(
-        "Successfully authenticated from token as: {}",
-        user.username
-    );
-    return Ok((token_info, user));
-}
-
-pub async fn get_authenticated() -> Result<(TokenInfo, LichessUser), Box<dyn std::error::Error>> {
-    /*! Returns auth-token by either loading it from disc, or by reauthenticating */
-    match load_token().await {
-        Ok((token_info, user_info)) => {
-            info!("Authenticated via existing token.");
-            return Ok((token_info, user_info));
-        }
-        Err(_) => {
-            //authenticate
-            info!("No token found.. Starting authentication process");
-            let (token_info, user_info) = authenticate().await?;
-            info!("Authenticated via direct authentification.");
-            return Ok((token_info, user_info));
-            // TODO: What if this authentication process fails? (e.g. losing internet access in process)
-        }
+    // Return None if file is empty -> lets to reauthentication
+    if buf.is_empty() {
+        return Ok(None);
     }
+
+    let token_info = serde_json::from_slice::<TokenInfo>(&buf[..])?;
+
+    return Ok(Some(token_info));
 }
 
 pub async fn authenticated_request(

@@ -34,7 +34,7 @@ eips "Starting test app..."
 sleep 3
 eips -c
 
-# WICHTIG: Timeout - falls das Programm hängt, automatisch beenden nach 15 Sekunden
+# WICHTIG: Timeout - falls das Programm hängt, automatisch beenden nach 3min
 timeout 180 $BINARY_PATH >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?

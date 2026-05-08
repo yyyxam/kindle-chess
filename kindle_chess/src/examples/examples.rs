@@ -40,3 +40,14 @@
 //     .unwrap();
 
 // resign_game(&game_id, &auth_token).await.unwrap();
+
+// RECENT GAMES
+// let auth = get_authenticated().await.unwrap();
+
+// // Get 5 most urgent games - assuming urgency = oldest / depending on gamemode
+// let on_games = get_ongoing_games(&auth.0, 5).await.unwrap().now_playing;
+// for game in &on_games {
+//     info!("Retrieved game-id {}", &game.full_id);
+// }
+// let game_id = on_games[0].full_id.clone();
+// info!("Streaming game id: {}", &game_id);
