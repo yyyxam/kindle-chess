@@ -79,9 +79,13 @@ pub fn parse_tag_version(tag: &str) -> Option<Version> {
     Version::parse(trimmed).ok()
 }
 
-/// Returns `Some(UpdateInfo)` if the latest release is strictly newer than the
-/// running binary AND ships both the binary and sha256 assets we expect.
-/// Otherwise returns `None` — callers treat that as "you're up to date".
+/// Returns `Ok(Some(_))` if the latest release is strictly newer AND ships
+/// both expected assets, `Ok(None)` if the running binary is already at or
+/// past the latest tag, and `Err(_)` for everything in between (unparseable
+/// tag, release published but assets not yet uploaded — common while
+/// `release.yml` is still cross-building — etc.). The UI shows `Ok(None)`
+/// as "up to date" and `Err(_)` as "Check failed: <reason>", so we want the
+/// "release exists but isn't yet usable" cases to land in the latter.
 pub async fn check_for_update() -> Result<Option<UpdateInfo>, Box<dyn std::error::Error>> {
     let release = fetch_latest_release().await?;
 
@@ -89,7 +93,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, Box<dyn std::error
         Some(v) => v,
         None => {
             warn!("Unparseable release tag: {}", release.tag_name);
-            return Ok(None);
+            return Err(format!("unparseable release tag: {}", release.tag_name).into());
         }
     };
 
@@ -104,11 +108,19 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, Box<dyn std::error
     let (asset, sha) = match (asset, sha) {
         (Some(a), Some(s)) => (a, s),
         _ => {
+            // Most likely cause: release.yml is still running and hasn't
+            // uploaded the binary yet. Surfacing as an error gets the user a
+            // "try again in a minute" message instead of a misleading
+            // "you're up to date".
             warn!(
                 "Release {} is missing required assets ({} and/or {})",
                 release.tag_name, ASSET_NAME, SHA_NAME
             );
-            return Ok(None);
+            return Err(format!(
+                "release {} is missing assets — build may still be in progress",
+                release.tag_name
+            )
+            .into());
         }
     };
 
